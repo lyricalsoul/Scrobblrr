@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		D561310E2FE4C5A9005C1B3B /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = D5962ABF2FE4BF9B00E4D3B4 /* MediaRemoteAdapter */; };
 		D561318E2FE4D405005C1B3B /* SlayZ.icon in Resources */ = {isa = PBXBuildFile; fileRef = D561318D2FE4D405005C1B3B /* SlayZ.icon */; };
-		D57D8BCC2FF2618100CAB313 /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = D57D8BCB2FF2617C00CAB313 /* README.md */; };
 		D5962ABD2FE4BF7F00E4D3B4 /* LastFM in Frameworks */ = {isa = PBXBuildFile; productRef = D5962ABC2FE4BF7F00E4D3B4 /* LastFM */; };
 		D5962AC12FE4BFA500E4D3B4 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = D5962ABF2FE4BF9B00E4D3B4 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -29,7 +28,6 @@
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Scrobblr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Scrobblr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D561318D2FE4D405005C1B3B /* SlayZ.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = SlayZ.icon; sourceTree = "<group>"; };
-		D57D8BCB2FF2617C00CAB313 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -76,7 +74,6 @@
 			isa = PBXGroup;
 			children = (
 				D57D8BCD2FF2618600CAB313 /* .github */,
-				D57D8BCB2FF2617C00CAB313 /* README.md */,
 				000000000000000000000010 /* Scrobblr */,
 				D5962AD22FE4C56800E4D3B4 /* Frameworks */,
 				000000000000000000000020 /* Products */,
@@ -177,7 +174,6 @@
 		000000000000000120000000 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
-				D57D8BCC2FF2618100CAB313 /* README.md in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */

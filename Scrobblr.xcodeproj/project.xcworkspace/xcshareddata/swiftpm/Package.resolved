@@ -1,0 +1,33 @@
+{
+  "originHash" : "eb8d3e9b448fdbadde5b117854ecfaff7bbb8172a8daad34910a4f04c161d25a",
+  "pins" : [
+    {
+      "identity" : "lastfm.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/duhnnie/LastFM.swift",
+      "state" : {
+        "revision" : "ab19b1f8c81abdb5760fb06b8095a9e232af1ca1",
+        "version" : "1.6.1"
+      }
+    },
+    {
+      "identity" : "mediaremote-adapter",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ejbills/mediaremote-adapter",
+      "state" : {
+        "branch" : "master",
+        "revision" : "cf30c4f1af29b5829d859f088f8dbdf12611a046"
+      }
+    },
+    {
+      "identity" : "swiftrestclient",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/duhnnie/SwiftRestClient",
+      "state" : {
+        "revision" : "eb7b2fcf534b0293e11e139866c5117bc56e7695",
+        "version" : "0.7.1"
+      }
+    }
+  ],
+  "version" : 3
+}

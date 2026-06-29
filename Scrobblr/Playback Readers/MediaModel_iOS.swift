@@ -15,39 +15,41 @@ import os
 @Observable
 @MainActor
 final class MediaModel {
-    /// The currently playing track
-    var trackInfo: GenericPlaybackInfo? { engine.current }
+    /// The current MusicKit authorization status. Seeded synchronously from the
+    /// system's cached status so the UI never flashes the "access needed" gate
+    /// before `start()` has had a chance to ask.
+    private(set) var authorizationStatus: MusicAuthorization.Status = MusicAuthorization.currentStatus
 
     /// Whether the user has granted MusicKit access
-    private(set) var isAuthorized = false
+    var isAuthorized: Bool { authorizationStatus == .authorized }
 
-    @ObservationIgnored let engine: ScrobbleEngine
+    /// `true` only when the system has refused access
+    var accessDenied: Bool { authorizationStatus == .denied || authorizationStatus == .restricted }
+
     @ObservationIgnored private let keeper = SilentAudioKeeper()
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
 
     @ObservationIgnored private var currentSongID: MusicItemID?
-    @ObservationIgnored private var currentArtwork: UIImage?
-    @ObservationIgnored private var artworkTask: Task<Void, Never>?
     @ObservationIgnored private var heartbeatTask: Task<Void, Never>?
 
     private static let heartbeatInterval: Duration = .seconds(15)
+    
+    private let manager: ScrobblerManager
 
     init(manager: ScrobblerManager, settings: Settings) {
-        engine = ScrobbleEngine(manager: manager, settings: settings)
+        self.manager = manager
     }
 
     deinit {
         heartbeatTask?.cancel()
-        artworkTask?.cancel()
     }
 
     /// Requests MusicKit access, starts the background audio keeper, and begins
     /// observing the system player
     func start() async {
-        let status = await MusicAuthorization.request()
-        isAuthorized = (status == .authorized)
+        authorizationStatus = await MusicAuthorization.request()
         guard isAuthorized else {
-            Logger.auth.error("MusicKit authorization denied: \(String(describing: status), privacy: .public)")
+            Logger.auth.error("MusicKit authorization denied: \(String(describing: self.authorizationStatus), privacy: .public)")
             return
         }
 
@@ -66,6 +68,9 @@ final class MediaModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.heartbeatInterval)
                 guard !Task.isCancelled, let self else { return }
+                // Pick up a revocation that happened while we were running so the
+                // UI can switch to the access gate cleanly instead of going stale.
+                self.authorizationStatus = MusicAuthorization.currentStatus
                 self.keeper.ensurePlaying()
                 self.publishCurrent()
             }
@@ -94,18 +99,14 @@ final class MediaModel {
         let player = SystemMusicPlayer.shared
 
         guard case let .song(song)? = player.queue.currentEntry?.item else {
-            engine.update(nil)
+            manager.update(nil)
             currentSongID = nil
-            currentArtwork = nil
-            artworkTask?.cancel()
             return
         }
 
         // reset artwork and kick off a fresh download
         if song.id != currentSongID {
             currentSongID = song.id
-            currentArtwork = nil
-            loadArtwork(for: song)
         }
 
         let info = GenericPlaybackInfo(
@@ -114,29 +115,9 @@ final class MediaModel {
             album: song.albumTitle,
             durationSeconds: Int(song.duration ?? 0),
             elapsedTimeSeconds: Int(player.playbackTime),
-            isPlaying: player.state.playbackStatus == .playing,
-            image: currentArtwork
+            isPlaying: player.state.playbackStatus == .playing
         )
-        engine.update(info)
-    }
-
-    // MARK: - Artwork
-
-    // TODO: use a library for this
-    private func loadArtwork(for song: Song) {
-        artworkTask?.cancel()
-        guard let artwork = song.artwork,
-              let url = artwork.url(width: 600, height: 600) else { return }
-
-        let songID = song.id
-        artworkTask = Task { [weak self] in
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
-                  let image = UIImage(data: data) else { return }
-            guard !Task.isCancelled, let self, self.currentSongID == songID else { return }
-            self.currentArtwork = image
-            // force UI update w new artwork
-            self.publishCurrent()
-        }
+        manager.update(info)
     }
 }
 #endif

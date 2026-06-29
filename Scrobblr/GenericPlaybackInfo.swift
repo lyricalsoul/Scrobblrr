@@ -6,15 +6,6 @@
 //
 import SwiftUI
 
-#if os(macOS)
-import AppKit
-/// The native bitmap-image type for the current platform
-typealias PlatformImage = NSImage
-#else
-import UIKit
-typealias PlatformImage = UIImage
-#endif
-
 struct GenericPlaybackInfo : Equatable {
     let title: String
     let artist: String
@@ -25,8 +16,6 @@ struct GenericPlaybackInfo : Equatable {
 
     let isPlaying: Bool
 
-    var image: PlatformImage?
-    
     var displayName: String {
         "\(artist) - \(title)"
     }
@@ -40,19 +29,20 @@ struct GenericPlaybackInfo : Equatable {
         "\(artist)\u{1}\(title)\u{1}\(album ?? "")"
     }
 
-    var artworkImage: Image? {
-        guard let image else { return nil }
-        #if os(macOS)
-        return Image(nsImage: image)
-        #else
-        return Image(uiImage: image)
-        #endif
+    /// A copy of this playback state with title/artist/album replaced by the
+    /// corrected metadata from `scrobble`, keeping the original timing.
+    func withMetadata(from scrobble: Scrobble) -> GenericPlaybackInfo {
+        GenericPlaybackInfo(
+            title: scrobble.track,
+            artist: scrobble.artist,
+            album: scrobble.album,
+            durationSeconds: durationSeconds,
+            elapsedTimeSeconds: elapsedTimeSeconds,
+            isPlaying: isPlaying
+        )
     }
-    
+
     static func == (lhs: GenericPlaybackInfo, rhs: GenericPlaybackInfo) -> Bool {
-        lhs.displayName == rhs.displayName
-        && lhs.album == rhs.album
-        // equal unless one of the images have changed
-        && (lhs.image == nil) == (rhs.image == nil)
+        lhs.displayName == rhs.displayName && lhs.album == rhs.album
     }
 }

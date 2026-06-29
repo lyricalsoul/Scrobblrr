@@ -8,6 +8,7 @@
 #if os(iOS)
 import SwiftUI
 import SwiftData
+import CachedAsyncImage
 
 struct MainView: View {
     let model: MediaModel
@@ -35,19 +36,23 @@ struct MainView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if !model.isAuthorized {
+        if model.accessDenied {
             appleMusicAccessNeeded
+        } else if !model.isAuthorized {
+            // Authorization not yet determined (about to prompt)
+            nowPlaying(
+                title: "Connecting to Apple Music…",
+                subtitle: "Please wait."
+            )
         } else if !manager.lastFM.isAuthenticated {
             ConnectLastFMView(onSignIn: signIn)
-        } else if let track = model.trackInfo {
+        } else if let track = manager.current {
             nowPlaying(
-                artwork: track.artworkImage,
                 title: track.title,
                 subtitle: track.subtitle
             )
         } else {
             nowPlaying(
-                artwork: nil,
                 title: "No playback detected",
                 subtitle: "Start playing something in Apple Music…"
             )
@@ -56,17 +61,14 @@ struct MainView: View {
 
     // MARK: - Now playing
 
-    private func nowPlaying(artwork: Image?, title: String, subtitle: String) -> some View {
-        // TODO: fix late arriving artwork
-        let artworkID = "\(title)\u{1}\(artwork != nil)"
+    private func nowPlaying(title: String, subtitle: String) -> some View {
+        let artworkID = "\(title)\(manager.coverImageUrl != nil)"
 
         return VStack(spacing: 28) {
             Group {
-                if let artwork {
-                    artwork
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } else {
+                CachedAsyncImage(url: manager.coverImageUrl) { image in
+                    image.resizable().aspectRatio(contentMode: .fit)
+                } placeholder: {
                     Image(systemName: "music.note.slash")
                         .font(.system(size: 72))
                         .foregroundStyle(.secondary)
@@ -103,7 +105,6 @@ struct MainView: View {
     }
 
     // MARK: - Gates
-    // TODO: fix content flash after access is revoked after timeout
     private var appleMusicAccessNeeded: some View {
         ContentUnavailableView {
             Label("Apple Music Access Needed", systemImage: "music.note")

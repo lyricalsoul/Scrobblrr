@@ -9,23 +9,42 @@ import Foundation
 import SwiftData
 import LastFM
 import os
+import CachedAsyncImage
+import SwiftUI
 
+typealias CoverImage<Content: View, Placeholder: View> = CachedAsyncImage<_ConditionalContent<Content, Placeholder>>
 
+@Observable
 class ScrobblerManager {
-    let intelligence: AutoCorrector
+    private(set) var current: GenericPlaybackInfo?
+    private(set) var coverImageUrl: URL? = nil
 
+    @ObservationIgnored let intelligence: AutoCorrector
 
-    let lastFM = LastFMScrobbler()
-    private var services: [any Scrobbable] { [lastFM] }
+    @ObservationIgnored let lastFM = LastFMScrobbler()
+    @ObservationIgnored private var services: [any Scrobbable] { [lastFM] }
 
-    private let modelContainer: ModelContainer
-    private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private let modelContainer: ModelContainer
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
 
-    private static let baseDelay: TimeInterval = 30          // first retry after 30s
-    private static let maxDelay: TimeInterval = 60 * 60      // cap at 1 hour
-    private static let maxAttempts = 12                      // then give up
-    private static let idlePollInterval: TimeInterval = 60   // when queue is empty
+    @ObservationIgnored private static let baseDelay: TimeInterval = 30          // first retry after 30s
+    @ObservationIgnored private static let maxDelay: TimeInterval = 60 * 60      // cap at 1 hour
+    @ObservationIgnored private static let maxAttempts = 12                      // then give up
+    @ObservationIgnored private static let idlePollInterval: TimeInterval = 60   // when queue is empty
+    
+    @ObservationIgnored private var currentTrackID: String?
+    @ObservationIgnored private var wasPlaying = false
+    @ObservationIgnored private var pendingScrobble: Scrobble?
+    @ObservationIgnored private var lastRaw: GenericPlaybackInfo?
+    @ObservationIgnored private var didScrobbleCurrent = false
+    @ObservationIgnored private var scrobbleTask: Task<Void, Never>?
 
+    private var settings: Settings {
+        get {
+            return Settings.shared(in: modelContainer.mainContext)
+        }
+    }
+    
     init(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
         self.intelligence = AutoCorrector(modelContainer: modelContainer)
@@ -34,19 +53,16 @@ class ScrobblerManager {
 
     deinit {
         retryTask?.cancel()
+        scrobbleTask?.cancel()
     }
 
     // MARK: - Main
-
-    func prepare(_ track: GenericPlaybackInfo) async -> Scrobble? {
-        await corrected(from: track)
-    }
 
     func sendNowPlaying(_ scrobble: Scrobble) async {
         for service in services where service.isAuthenticated {
             do {
                 try await service.updateNowPlaying(scrobble)
-                Logger.scrobbler.info("Now playing \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+                Logger.scrobbler.info("Sent NP to \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) - \(scrobble.track, privacy: .public)")
             } catch {
                 Logger.scrobbler.error("Now playing \(service.name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -77,7 +93,6 @@ class ScrobblerManager {
             artist: artist,
             track: trackTitle,
             album: album,
-            albumArtist: nil,
             durationSeconds: track.durationSeconds,
             timestamp: Date(timeIntervalSinceNow: -Double(track.elapsedTimeSeconds))
         )
@@ -86,7 +101,7 @@ class ScrobblerManager {
     /// The corrected title to scrobble, or `nil`
     private func scrobbleable(_ correction: CorrectedEntity, original: String) -> String? {
         guard correction.shouldScrobble else {
-            Logger.scrobbler.info("Skipping \(original, privacy: .public) — \(correction.reason ?? "ignored by rule", privacy: .public)")
+            Logger.scrobbler.info("Skipping \(original, privacy: .public), reason: \(correction.reason ?? "ignored by rule", privacy: .public)")
             return nil
         }
         return correction.title
@@ -97,13 +112,13 @@ class ScrobblerManager {
     private func submit(_ scrobble: Scrobble, to service: any Scrobbable) async {
         do {
             try await service.scrobble(scrobble)
-            Logger.scrobbler.info("Scrobbled \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+            Logger.scrobbler.info("Scrobbled to \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) - \(scrobble.track, privacy: .public)")
         } catch {
             if isRetryable(error) {
                 enqueue(scrobble, for: service.name)
-                Logger.scrobbler.error("Scrobble \(service.name, privacy: .public) failed (retryable), queued: \(error.localizedDescription, privacy: .public)")
+                Logger.scrobbler.error("Scrobble to \(service.name, privacy: .public) failed, queued: \(error.localizedDescription, privacy: .public)")
             } else {
-                Logger.scrobbler.error("Scrobble \(service.name, privacy: .public) dropped (permanent): \(error.localizedDescription, privacy: .public)")
+                Logger.scrobbler.error("Scrobble to \(service.name, privacy: .public) dropped: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -151,7 +166,7 @@ class ScrobblerManager {
         let now = Date()
         let due = items.filter { $0.nextAttempt <= now }
         if !due.isEmpty {
-            Logger.queue.info("Processing \(due.count) due queued scrobble(s) of \(items.count) total")
+            Logger.queue.info("Processing \(due.count) queued scrobble(s) of \(items.count) total")
         }
         for item in due {
             await process(item, in: context)
@@ -164,7 +179,7 @@ class ScrobblerManager {
 
     private func process(_ item: QueuedScrobble, in context: ModelContext) async {
         guard let service = services.first(where: { $0.name == item.serviceName }) else {
-            context.delete(item) // unknown service, can't ever succeed
+            context.delete(item) // unknown service, can't succeed
             try? context.save()
             return
         }
@@ -178,7 +193,7 @@ class ScrobblerManager {
         do {
             try await service.scrobble(scrobble)
             context.delete(item)
-            Logger.queue.info("Retry succeeded for \(item.serviceName, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+            Logger.queue.info("Retry succeeded for \(item.serviceName, privacy: .public): \(scrobble.artist, privacy: .public) - \(scrobble.track, privacy: .public)")
         } catch {
             if isRetryable(error) && item.attempt + 1 < Self.maxAttempts {
                 item.attempt += 1
@@ -222,6 +237,115 @@ class ScrobblerManager {
             }
         default:
             return true // unknown: prefer not to lose the scrobble (bounded by maxAttempts)
+        }
+    }
+    
+    // MARK: - Event handling
+    
+    /// Feed the latest playback state. Pass `nil` when playback stops
+    func update(_ info: GenericPlaybackInfo?) {
+        guard let info else {
+            handleStopped()
+            return
+        }
+
+        Task { await handle(info) }
+    }
+    
+    private func handle(_ info: GenericPlaybackInfo) async {
+        let isNewTrack = info.id != currentTrackID
+        let playStateChanged = info.isPlaying != wasPlaying
+        
+        guard isNewTrack || playStateChanged else {
+            return
+        }
+        
+        currentTrackID = info.id
+        wasPlaying = info.isPlaying
+
+        if isNewTrack {
+            didScrobbleCurrent = false
+            scrobbleTask?.cancel()
+            scrobbleTask = nil
+            // Drop the previous track's correction while we compute this one's.
+            pendingScrobble = nil
+
+            let scrobble = await corrected(from: info)
+            pendingScrobble = scrobble
+            
+            if info.album != nil {
+                if let url = await lastFM.getAlbumCover(name: info.album!, artist: info.artist) {
+                    coverImageUrl = url
+                }
+            }
+            
+            
+            // are we still playing the same thing after the model run?
+            guard currentTrackID == info.id else { return }
+            
+            // refresh with the up to date info
+            guard scrobble != nil else { return }
+            current = info.withMetadata(from: scrobble!)
+
+            if info.isPlaying {
+                Logger.playback.info("New track playing: \(info.displayName, privacy: .public)")
+                await announceAndSchedule(for: info)
+            } else {
+                Logger.playback.info("New track is paused, waiting: \(info.displayName, privacy: .public)")
+            }
+        } else if info.isPlaying {
+            // Resumed
+            guard !didScrobbleCurrent, pendingScrobble != nil else { return }
+            Logger.playback.info("Resumed \(info.displayName, privacy: .public)")
+            await announceAndSchedule(for: info)
+        } else {
+            // Paused
+            if scrobbleTask != nil {
+                Logger.playback.info("Paused: cancelling scrobble countdown for \(info.displayName, privacy: .public)")
+            }
+            scrobbleTask?.cancel()
+            scrobbleTask = nil
+        }
+    }
+
+    /// Sends now playing request to last.fm
+    private func announceAndSchedule(for info: GenericPlaybackInfo) async {
+        guard let scrobble = pendingScrobble else { return }
+        await self.sendNowPlaying(scrobble)
+        guard currentTrackID == info.id, wasPlaying else { return }
+        scheduleCommit(for: info)
+    }
+
+    private func handleStopped() {
+        scrobbleTask?.cancel()
+        scrobbleTask = nil
+        currentTrackID = nil
+        wasPlaying = false
+        pendingScrobble = nil
+        lastRaw = nil
+        didScrobbleCurrent = false
+        current = nil
+    }
+
+    /// Schedules the committed scrobble for the time remaining until the listen
+    /// threshold is reached, based on the current elapsed position.
+    private func scheduleCommit(for info: GenericPlaybackInfo) {
+        guard let scrobble = pendingScrobble else { return }
+        guard info.isPlaying else { return }
+        guard info.durationSeconds >= settings.minTrackSeconds else { return } // too short to scrobble
+
+        let target = min(Double(info.durationSeconds) * settings.scrobbleThreshold, Double(settings.maxScrobbleSeconds))
+        let remaining = max(0, target - Double(info.elapsedTimeSeconds))
+
+        Logger.playback.info("Scrobble scheduled in \(Int(remaining))s for \(info.displayName, privacy: .public)")
+
+        scrobbleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(remaining))
+            guard !Task.isCancelled, let self else { return }
+            Logger.playback.info("Threshold reached, pushing \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+            await self.commit(scrobble)
+            self.didScrobbleCurrent = true
+            self.scrobbleTask = nil
         }
     }
 }

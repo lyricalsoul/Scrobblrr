@@ -12,7 +12,6 @@ struct Scrobble: Sendable, Codable, Equatable {
     let artist: String
     let track: String
     let album: String?
-    let albumArtist: String?
     let durationSeconds: Int?
     /// When playback of this track started.
     let timestamp: Date

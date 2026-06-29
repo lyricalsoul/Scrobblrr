@@ -70,7 +70,6 @@ final class LastFMScrobbler: Scrobbable {
             artist: scrobble.artist,
             track: scrobble.track,
             album: scrobble.album,
-            albumArtist: scrobble.albumArtist,
             duration: scrobble.durationSeconds.flatMap { UInt(exactly: $0) }
         )
 
@@ -82,7 +81,7 @@ final class LastFMScrobbler: Scrobbable {
 
         if hasRecentlyLaunchedApp {
             if await alreadyScrobbled(scrobble) {
-                Logger.scrobbler.info("Skipping duplicate (already on Last.fm): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+                Logger.scrobbler.info("Skipping duplicate (already on Last.fm): \(scrobble.artist, privacy: .public): \(scrobble.track, privacy: .public)")
                 
                 return
             }
@@ -95,7 +94,6 @@ final class LastFMScrobbler: Scrobbable {
             track: scrobble.track,
             date: scrobble.timestamp,
             album: scrobble.album,
-            albumArtist: scrobble.albumArtist,
             duration: scrobble.durationSeconds.flatMap { UInt(exactly: $0) }
         ))
 
@@ -119,6 +117,21 @@ final class LastFMScrobbler: Scrobbable {
         } catch {
             Logger.scrobbler.error("Recent-tracks dedupe check failed: \(error.localizedDescription, privacy: .public). Will ignore")
             return false
+        }
+    }
+    
+    func getAlbumCover(name: String, artist: String) async -> URL? {
+        do {
+            let params = AlbumInfoParams(artist: artist, album: name, autocorrect: true, username: username)
+            let page = try await client.Album.getInfo(params: params)
+            guard let imageURL = page.image.extraLarge else {
+                return nil
+            }
+
+            return URL(string: imageURL.absoluteString.replacing("300x300", with: "1000x1000"))
+        } catch {
+            Logger.scrobbler.error("Couldn't fetch album cover: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 }

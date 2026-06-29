@@ -174,7 +174,6 @@ actor AutoCorrector {
         return matches.first { $0.kind == entity }
     }
 
-    // TODO: am I actually ignoring scrobbles where its false?
     /// Inserts (or updates) a correction rule. A `nil` replacement marks the
     /// entity as "do not scrobble"
     func save(target: String, replacement: String?, entity: CorrectionEntity) {

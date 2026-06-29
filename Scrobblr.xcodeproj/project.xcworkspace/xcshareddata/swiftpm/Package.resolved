@@ -1,5 +1,5 @@
 {
-  "originHash" : "eb8d3e9b448fdbadde5b117854ecfaff7bbb8172a8daad34910a4f04c161d25a",
+  "originHash" : "4e6c5e33f2f189bcd47f93f82117f1b43481393c1e17c5b7839fd1864de935b4",
   "pins" : [
     {
       "identity" : "lastfm.swift",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "eb7b2fcf534b0293e11e139866c5117bc56e7695",
         "version" : "0.7.1"
+      }
+    },
+    {
+      "identity" : "swiftui-cached-async-image",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/lyricalsoul/swiftui-cached-async-image",
+      "state" : {
+        "branch" : "main",
+        "revision" : "d33c8adee153590ddb26cabf8cd45198906b0573"
       }
     }
   ],

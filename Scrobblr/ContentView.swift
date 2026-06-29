@@ -5,6 +5,7 @@ import SwiftData
     @State private var manager: ScrobblerManager
     @State private var model: MediaModel
     @State private var webAuth = WebAuthCoordinator()
+    
     private let modelContainer: ModelContainer
     private let settings: Settings
 
@@ -18,16 +19,18 @@ import SwiftData
 
         let settings = Settings.shared(in: container.mainContext)
         let manager = ScrobblerManager(modelContainer: container)
+        
         modelContainer = container
         self.settings = settings
+        
         _manager = State(initialValue: manager)
         _model = State(initialValue: MediaModel(manager: manager, settings: settings))
     }
 
     var body: some Scene {
-        WindowGroup(id: "SquarePlayerWindow") {
+        WindowGroup {
             #if os(macOS)
-            MainView(model: model, manager: manager)
+            MainView(manager: manager)
                 .onOpenURL { url in
                     print(url)
                 }
@@ -38,7 +41,6 @@ import SwiftData
         }
         .modelContainer(modelContainer)
         #if os(macOS)
-        //.defaultSize(width: CGFloat(Constants.imageDimensionOnMacOS), height: CGFloat(Constants.imageDimensionOnMacOS))
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         #endif
@@ -46,7 +48,7 @@ import SwiftData
         #if os(macOS)
         MenuBarExtra(
             "Scroblrr",
-            systemImage: (model.trackInfo != nil) ? "music.note" : "music.note.slash"
+            systemImage: (manager.current != nil) ? "music.note" : "music.note.slash"
         ) {
             let scrobbler = manager.lastFM
             if scrobbler.isAuthenticated {
@@ -59,7 +61,7 @@ import SwiftData
             Divider()
             
             if settings.showNowPlayingInMenu {
-                Text(model.trackInfo?.displayName ?? "No playback detected")
+                Text(manager.current?.displayName ?? "No playback detected")
                 Divider()
             }
             

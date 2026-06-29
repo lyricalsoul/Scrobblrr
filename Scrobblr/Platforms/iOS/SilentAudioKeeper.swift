@@ -4,9 +4,7 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-//  Keeps an always-active, silent audio session so iOS doesn't suspend the app
-//  in the background — letting it keep observing playback and posting scrobbles.
-//  Mixes with other audio so it never interrupts the music being played.
+//
 
 #if os(iOS)
 import AVFoundation
@@ -22,40 +20,35 @@ final class SilentAudioKeeper {
 
         let center = NotificationCenter.default
 
-        // After an interruption (e.g. a phone call) the session is deactivated;
-        // reactivate and resume the silence once it ends.
+        // after interruption, keep playing empty audio
         observers.append(center.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in
             MainActor.assumeIsolated { self?.handleInterruption(note) }
         })
 
-        // The media server can reset after long runtime, invalidating both the
-        // session and the player. Rebuild everything from scratch when it does —
-        // otherwise the silence stops and the app eventually gets suspended.
+        // rebuild media services after timeout or reset
         observers.append(center.addObserver(
             forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                Logger.playback.error("Audio media services were reset — rebuilding silent keeper")
+                Logger.playback.error("Audio media services were reset, rebuilding keeper")
                 self?.player = nil
                 self?.configureAndPlay()
             }
         })
     }
 
-    /// Re-asserts the session and silence. Safe to call repeatedly (e.g. from a
-    /// heartbeat or on returning to the foreground); only acts if playback stalled.
     func ensurePlaying() {
         guard player?.isPlaying != true else { return }
-        Logger.playback.info("Silent keeper not playing — re-asserting")
+        Logger.playback.info("Silent keeper not playing, restarting")
         configureAndPlay()
     }
 
     private func configureAndPlay() {
         guard let url = Bundle.main.url(forResource: "silence", withExtension: "mp3") else {
             assertionFailure("silence.mp3 not found in bundle")
-            Logger.playback.error("silence.mp3 not found in bundle")
+            Logger.playback.error("silence.mp3 not found in bundle?")
             return
         }
 

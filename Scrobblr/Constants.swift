@@ -12,4 +12,20 @@ struct Constants {
     static let lfmApiSecret = "a2eaf6c578c8d0bfda2c4846205aad0c"
     
     static let imageDimensionOnMacOS: CGFloat = 400
+
+    static let trackNoiseKeywords = [
+        "remaster(?:ed)?",
+        "single version",
+        "album version",
+        "mono version",
+        "stereo version",
+        "original mix",
+        "original version",
+    ]
+    
+    static let albumNoiseKeywords = [
+        "deluxe version",
+        "deluxe edition",
+        "remaster(?:ed)?",
+    ]
 }

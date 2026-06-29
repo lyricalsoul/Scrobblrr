@@ -8,7 +8,7 @@ import SwiftUI
 
 #if os(macOS)
 import AppKit
-/// The native bitmap-image type for the current platform.
+/// The native bitmap-image type for the current platform
 typealias PlatformImage = NSImage
 #else
 import UIKit
@@ -31,12 +31,15 @@ struct GenericPlaybackInfo : Equatable {
         "\(artist) - \(title)"
     }
 
-    /// Stable identity for a track, independent of playback position/state.
+    /// "Artist • Album", subtitle on the player
+    var subtitle: String {
+        "\(artist) • \(album ?? "Unknown Album")"
+    }
+
     var id: String {
         "\(artist)\u{1}\(title)\u{1}\(album ?? "")"
     }
 
-    /// The artwork as a SwiftUI `Image`, or `nil` when there's no artwork.
     var artworkImage: Image? {
         guard let image else { return nil }
         #if os(macOS)
@@ -49,9 +52,7 @@ struct GenericPlaybackInfo : Equatable {
     static func == (lhs: GenericPlaybackInfo, rhs: GenericPlaybackInfo) -> Bool {
         lhs.displayName == rhs.displayName
         && lhs.album == rhs.album
-        // Artwork often arrives in a later event for the same track (the OS has
-        // to decode the cover first). Treat the appearance/disappearance of
-        // artwork as a real change so SwiftUI refreshes the displayed image.
+        // equal unless one of the images have changed
         && (lhs.image == nil) == (rhs.image == nil)
     }
 }

@@ -10,13 +10,11 @@ import MediaRemoteAdapter
 import SwiftUI
 import os
 
-/// macOS playback source: reads system-wide "now playing" via MediaRemote and
-/// feeds it into the shared ``ScrobbleEngine``.
 @MainActor
 final class MediaModel {
     let engine: ScrobbleEngine
 
-    /// The currently playing track, for the UI.
+    /// The currently playing track
     var trackInfo: GenericPlaybackInfo? { engine.current }
 
     private let mediaController = MediaController()

@@ -10,22 +10,17 @@ import SwiftData
 import LastFM
 import os
 
-/// Central hub for scrobbling. Live scrobbles are sent to every enabled
-/// `Scrobbable`; failures that look transient are persisted to a retry queue
-/// and resubmitted later with exponential backoff.
+
 class ScrobblerManager {
     let intelligence: AutoCorrector
 
-    /// The Last.fm destination, exposed so the UI can drive authentication.
-    let lastFM = LastFMScrobbler()
 
-    /// All scrobbling destinations. Add ListenBrainz here later.
+    let lastFM = LastFMScrobbler()
     private var services: [any Scrobbable] { [lastFM] }
 
     private let modelContainer: ModelContainer
     private var retryTask: Task<Void, Never>?
 
-    // Backoff configuration.
     private static let baseDelay: TimeInterval = 30          // first retry after 30s
     private static let maxDelay: TimeInterval = 60 * 60      // cap at 1 hour
     private static let maxAttempts = 12                      // then give up
@@ -41,30 +36,23 @@ class ScrobblerManager {
         retryTask?.cancel()
     }
 
-    // MARK: - Public API
+    // MARK: - Main
 
-    /// Corrects a track's metadata into a `Scrobble` (with a start timestamp)
-    /// without contacting any service. Returns `nil` if a rule says to skip it.
-    /// The caller decides when to `sendNowPlaying(_:)` / `commit(_:)`.
     func prepare(_ track: GenericPlaybackInfo) async -> Scrobble? {
         await corrected(from: track)
     }
 
-    /// Announces an already-corrected scrobble as "now playing" on every
-    /// signed-in service. Best-effort: never queued.
     func sendNowPlaying(_ scrobble: Scrobble) async {
         for service in services where service.isAuthenticated {
             do {
                 try await service.updateNowPlaying(scrobble)
-                Logger.scrobbler.info("Now playing → \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+                Logger.scrobbler.info("Now playing \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
             } catch {
-                Logger.scrobbler.error("Now playing → \(service.name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                Logger.scrobbler.error("Now playing \(service.name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
 
-    /// Submits a committed play to every signed-in service, queueing retryable
-    /// failures for later.
     func commit(_ scrobble: Scrobble) async {
         for service in services where service.isAuthenticated {
             await submit(scrobble, to: service)
@@ -73,24 +61,35 @@ class ScrobblerManager {
 
     // MARK: - Correction
 
-    /// Builds a `Scrobble` from live playback info, applying artist correction.
-    /// Returns `nil` when a rule marks the track as "do not scrobble".
     private func corrected(from track: GenericPlaybackInfo) async -> Scrobble? {
-        let correction = await intelligence.correctOrPassthrough(artist: track.artist)
+        guard let artist = scrobbleable(await intelligence.correct(artist: track.artist), original: track.artist),
+              let trackTitle = scrobbleable(await intelligence.correct(track: track.title), original: track.title)
+        else { return nil }
 
-        guard correction.shouldScrobble else {
-            Logger.scrobbler.info("Skipping \(track.artist, privacy: .public) — \(correction.reason ?? "ignored by rule", privacy: .public)")
-            return nil
+        var album = track.album
+        if let originalAlbum = track.album {
+            guard let correctedAlbum = scrobbleable(await intelligence.correct(album: originalAlbum), original: originalAlbum)
+            else { return nil }
+            album = correctedAlbum
         }
 
         return Scrobble(
-            artist: correction.title,
-            track: track.title,
-            album: track.album,
+            artist: artist,
+            track: trackTitle,
+            album: album,
             albumArtist: nil,
             durationSeconds: track.durationSeconds,
             timestamp: Date(timeIntervalSinceNow: -Double(track.elapsedTimeSeconds))
         )
+    }
+
+    /// The corrected title to scrobble, or `nil`
+    private func scrobbleable(_ correction: CorrectedEntity, original: String) -> String? {
+        guard correction.shouldScrobble else {
+            Logger.scrobbler.info("Skipping \(original, privacy: .public) — \(correction.reason ?? "ignored by rule", privacy: .public)")
+            return nil
+        }
+        return correction.title
     }
 
     // MARK: - Submission
@@ -98,13 +97,13 @@ class ScrobblerManager {
     private func submit(_ scrobble: Scrobble, to service: any Scrobbable) async {
         do {
             try await service.scrobble(scrobble)
-            Logger.scrobbler.info("Scrobbled → \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+            Logger.scrobbler.info("Scrobbled \(service.name, privacy: .public): \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
         } catch {
             if isRetryable(error) {
                 enqueue(scrobble, for: service.name)
-                Logger.scrobbler.error("Scrobble → \(service.name, privacy: .public) failed (retryable), queued: \(error.localizedDescription, privacy: .public)")
+                Logger.scrobbler.error("Scrobble \(service.name, privacy: .public) failed (retryable), queued: \(error.localizedDescription, privacy: .public)")
             } else {
-                Logger.scrobbler.error("Scrobble → \(service.name, privacy: .public) dropped (permanent): \(error.localizedDescription, privacy: .public)")
+                Logger.scrobbler.error("Scrobble \(service.name, privacy: .public) dropped (permanent): \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -140,8 +139,6 @@ class ScrobblerManager {
         }
     }
 
-    /// Processes every due queue item and returns how long to sleep before the
-    /// next tick (until the soonest pending item, or the idle interval).
     private func processQueueTick() async -> TimeInterval {
         let context = modelContainer.mainContext
         let descriptor = FetchDescriptor<QueuedScrobble>(
@@ -197,14 +194,12 @@ class ScrobblerManager {
 
     // MARK: - Helpers
 
-    /// Exponential backoff: 30s, 60s, 120s, … capped at `maxDelay`.
     private static func backoff(forAttempt attempt: Int) -> TimeInterval {
         let exponent = max(0, attempt - 1)
         let delay = baseDelay * pow(2, Double(exponent))
         return min(delay, maxDelay)
     }
 
-    /// Whether an error is worth retrying (network/transient) vs permanent.
     private func isRetryable(_ error: Error) -> Bool {
         switch error {
         case is URLError:

@@ -15,26 +15,18 @@ struct MainView : View {
     let model: MediaModel
     let manager: ScrobblerManager
 
+    @State private var webAuth = WebAuthCoordinator()
+
     var body: some View {
         if !manager.lastFM.isAuthenticated {
-            ConnectLastFMView(
-                isAwaitingAuthorization: manager.lastFM.isAwaitingAuthorization,
-                onSignIn: {
-                    Task {
-                        if let url = try? await manager.lastFM.beginAuthentication() {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                },
-                onFinish: {
-                    Task { try? await manager.lastFM.finishAuthentication() }
-                }
-            )
+            ConnectLastFMView {
+                Task { await webAuth.signIn(manager.lastFM) }
+            }
         } else if let trackInfo = model.trackInfo {
             nowPlaying(
                 artwork: trackInfo.image,
                 title: trackInfo.title,
-                subtitle: "\(trackInfo.artist) • \(trackInfo.album ?? "Unknown Album")"
+                subtitle: trackInfo.subtitle
             )
         } else {
             nowPlaying(
@@ -46,8 +38,7 @@ struct MainView : View {
     }
 
     private func nowPlaying(artwork: NSImage?, title: String, subtitle: String) -> some View {
-        // Identity for the artwork slot: changes when the track changes or when
-        // late-arriving artwork appears/disappears, which drives the crossfade.
+        // TODO: might have the same iOS problem
         let artworkID = "\(title)\u{1}\(artwork != nil)"
 
         return VStack(spacing: 0) {
@@ -57,8 +48,6 @@ struct MainView : View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                 } else {
-                    // No artwork: show a smaller centered glyph instead of
-                    // stretching the symbol across the whole artwork area.
                     Image(systemName: "music.note.slash")
                         .font(.system(size: Constants.imageDimensionOnMacOS * 0.28))
                         .foregroundStyle(.secondary)

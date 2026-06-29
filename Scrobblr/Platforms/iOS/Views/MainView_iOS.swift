@@ -19,7 +19,7 @@ struct MainView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Scroblrr")
+                .navigationTitle("Scrobblrr")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -43,7 +43,7 @@ struct MainView: View {
             nowPlaying(
                 artwork: track.artworkImage,
                 title: track.title,
-                subtitle: "\(track.artist) • \(track.album ?? "Unknown Album")"
+                subtitle: track.subtitle
             )
         } else {
             nowPlaying(
@@ -57,8 +57,7 @@ struct MainView: View {
     // MARK: - Now playing
 
     private func nowPlaying(artwork: Image?, title: String, subtitle: String) -> some View {
-        // Identity for the artwork slot: changes on a track change or when
-        // late-arriving artwork appears, which drives the crossfade.
+        // TODO: fix late arriving artwork
         let artworkID = "\(title)\u{1}\(artwork != nil)"
 
         return VStack(spacing: 28) {
@@ -104,7 +103,7 @@ struct MainView: View {
     }
 
     // MARK: - Gates
-
+    // TODO: fix content flash after access is revoked after timeout
     private var appleMusicAccessNeeded: some View {
         ContentUnavailableView {
             Label("Apple Music Access Needed", systemImage: "music.note")
@@ -123,12 +122,7 @@ struct MainView: View {
     // MARK: - Auth
 
     private func signIn() {
-        Task {
-            let url = manager.lastFM.authorizationURL(callbackScheme: "scrobblr")
-            if let token = await webAuth.authenticate(url: url, callbackScheme: "scrobblr") {
-                try? await manager.lastFM.completeAuthentication(token: token)
-            }
-        }
+        Task { await webAuth.signIn(manager.lastFM) }
     }
 }
 #endif

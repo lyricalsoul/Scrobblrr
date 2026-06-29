@@ -4,11 +4,6 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-//  Platform-agnostic scrobble timing state machine. A platform-specific
-//  playback reader (MediaRemote on macOS, MusicKit on iOS) translates its
-//  native events into `GenericPlaybackInfo` and feeds them in via `update(_:)`.
-//  The engine owns the "now playing" value the UI shows plus all the
-//  announce / threshold / commit bookkeeping.
 
 import SwiftUI
 import os
@@ -16,7 +11,7 @@ import os
 @Observable
 @MainActor
 final class ScrobbleEngine {
-    /// The currently playing track, for the UI. `nil` when nothing is playing.
+    // TODO: reuse mediamodel?
     private(set) var current: GenericPlaybackInfo?
 
     @ObservationIgnored private let manager: ScrobblerManager
@@ -25,6 +20,10 @@ final class ScrobbleEngine {
     @ObservationIgnored private var currentTrackID: String?
     @ObservationIgnored private var wasPlaying = false
     @ObservationIgnored private var pendingScrobble: Scrobble?
+    /// The track id `pendingScrobble`'s corrected metadata applies to
+    @ObservationIgnored private var pendingScrobbleID: String?
+   
+    @ObservationIgnored private var lastRaw: GenericPlaybackInfo?
     @ObservationIgnored private var didScrobbleCurrent = false
     @ObservationIgnored private var scrobbleTask: Task<Void, Never>?
 
@@ -39,16 +38,36 @@ final class ScrobbleEngine {
 
     // MARK: - Input
 
-    /// Feed the latest playback state. Pass `nil` when playback stops.
+    /// Feed the latest playback state. Pass `nil` when playback stops
     func update(_ info: GenericPlaybackInfo?) {
         guard let info else {
             handleStopped()
             return
         }
 
-        current = info
+        lastRaw = info
+        refreshCurrent()
         Logger.playback.debug("Event: \(info.displayName, privacy: .public) playing=\(info.isPlaying) elapsed=\(info.elapsedTimeSeconds)s/\(info.durationSeconds)s")
         Task { await handle(info) }
+    }
+
+    private func refreshCurrent() {
+        guard let lastRaw else { current = nil; return }
+        current = displayInfo(for: lastRaw)
+    }
+
+    // TODO: ew this is messy
+    private func displayInfo(for info: GenericPlaybackInfo) -> GenericPlaybackInfo {
+        guard let scrobble = pendingScrobble, pendingScrobbleID == info.id else { return info }
+        return GenericPlaybackInfo(
+            title: scrobble.track,
+            artist: scrobble.artist,
+            album: scrobble.album,
+            durationSeconds: info.durationSeconds,
+            elapsedTimeSeconds: info.elapsedTimeSeconds,
+            isPlaying: info.isPlaying,
+            image: info.image
+        )
     }
 
     // MARK: - Event handling
@@ -57,15 +76,10 @@ final class ScrobbleEngine {
         let isNewTrack = info.id != currentTrackID
         let playStateChanged = info.isPlaying != wasPlaying
 
-        // The reader may emit frequent events for the same track & state
-        // (progress ticks). Only react to real transitions — anything else is noise.
         guard isNewTrack || playStateChanged else {
             return
         }
 
-        // Commit dedupe state synchronously, before any await, so a concurrent
-        // event sees the updated state and treats itself as a no-op instead of
-        // double-handling across the suspension points below.
         currentTrackID = info.id
         wasPlaying = info.isPlaying
 
@@ -73,26 +87,32 @@ final class ScrobbleEngine {
             didScrobbleCurrent = false
             scrobbleTask?.cancel()
             scrobbleTask = nil
+            // Drop the previous track's correction while we compute this one's.
+            pendingScrobble = nil
+            pendingScrobbleID = nil
 
             let scrobble = await manager.prepare(info)
-            // A newer track may have superseded this one during the await.
+            // are we still playing the same thing after the model run?
             guard currentTrackID == info.id else { return }
             pendingScrobble = scrobble
+            pendingScrobbleID = info.id
+            // refresh with the up to date info
+            refreshCurrent()
             guard scrobble != nil else { return }
 
             if info.isPlaying {
                 Logger.playback.info("New track playing: \(info.displayName, privacy: .public)")
                 await announceAndSchedule(for: info)
             } else {
-                Logger.playback.info("New track is paused; holding without announcing: \(info.displayName, privacy: .public)")
+                Logger.playback.info("New track is paused, waiting: \(info.displayName, privacy: .public)")
             }
         } else if info.isPlaying {
-            // Resumed.
+            // Resumed
             guard !didScrobbleCurrent, pendingScrobble != nil else { return }
-            Logger.playback.info("Resumed: re-announcing and rescheduling for \(info.displayName, privacy: .public)")
+            Logger.playback.info("Resumed \(info.displayName, privacy: .public)")
             await announceAndSchedule(for: info)
         } else {
-            // Paused.
+            // Paused
             if scrobbleTask != nil {
                 Logger.playback.info("Paused: cancelling scrobble countdown for \(info.displayName, privacy: .public)")
             }
@@ -101,8 +121,7 @@ final class ScrobbleEngine {
         }
     }
 
-    /// Announces "now playing" and (re)schedules the commit, bailing if the
-    /// track or play state changed while awaiting the network call.
+    /// Sends now playing request to last.fm
     private func announceAndSchedule(for info: GenericPlaybackInfo) async {
         guard let scrobble = pendingScrobble else { return }
         await manager.sendNowPlaying(scrobble)
@@ -116,6 +135,8 @@ final class ScrobbleEngine {
         currentTrackID = nil
         wasPlaying = false
         pendingScrobble = nil
+        pendingScrobbleID = nil
+        lastRaw = nil
         didScrobbleCurrent = false
         current = nil
     }
@@ -135,7 +156,7 @@ final class ScrobbleEngine {
         scrobbleTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(remaining))
             guard !Task.isCancelled, let self else { return }
-            Logger.playback.info("Threshold reached, committing: \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
+            Logger.playback.info("Threshold reached, pushing \(scrobble.artist, privacy: .public) — \(scrobble.track, privacy: .public)")
             await self.manager.commit(scrobble)
             self.didScrobbleCurrent = true
             self.scrobbleTask = nil

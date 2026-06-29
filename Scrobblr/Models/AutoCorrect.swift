@@ -19,19 +19,17 @@ enum CorrectionEntity: String, Codable, CaseIterable {
 }
 
 /// A single auto-correction rule: when an entity's title matches `target`,
-/// it is rewritten to `replacement`. A `nil` replacement means the matched
-/// entity should not be scrobbled at all.
+/// it is rewritten to `replacement`. A `nil` value means the entity should not be scrobbled.
 @Model
 final class AutoCorrect {
     /// The original title to match against.
     var target: String
 
-    /// What `target` should be replaced with. `nil` means "don't scrobble".
+    /// What `target` should be replaced with, or `nil`
     var replacement: String?
 
+    // note to self, "entity" clashes with core data, do not use that as a name ever again
     /// Which kind of metadata this rule applies to.
-    /// NOTE: do NOT name this `entity` — that's a reserved Core Data property
-    /// name and SwiftData mis-stores it as a broken composite attribute.
     var kind: CorrectionEntity
 
     init(target: String, replacement: String?, kind: CorrectionEntity) {

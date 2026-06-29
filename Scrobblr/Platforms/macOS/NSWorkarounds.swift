@@ -9,7 +9,6 @@
 import AppKit
 import SwiftUI
 
-// 1. NSHostingView subclass that zeroes its own safe area
 final class NSHostingViewIgnoringSafeArea<T: View>: NSHostingView<T> {
     required init(rootView: T) {
         super.init(rootView: rootView)
@@ -39,7 +38,6 @@ final class NSHostingViewIgnoringSafeArea<T: View>: NSHostingView<T> {
     }
 }
 
-// 2. NSViewRepresentable that IS the hosting view (not a proxy)
 struct ToolbarAwareHostingView<Content: View>: NSViewRepresentable {
     @Binding var topPadding: CGFloat
     let content: () -> Content
@@ -59,7 +57,6 @@ struct ToolbarAwareHostingView<Content: View>: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-// 3. Modifier to wire it up
 struct HideTitlebarModifier: ViewModifier {
     @State private var topPadding: CGFloat = 0
 

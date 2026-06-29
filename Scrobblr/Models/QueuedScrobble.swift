@@ -4,24 +4,22 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-//  A scrobble that failed to submit (e.g. offline) and is awaiting retry.
-//  One row per (scrobble, service) so each destination retries independently.
 
 import Foundation
 import SwiftData
 
 @Model
 final class QueuedScrobble {
-    /// `Scrobbable.name` of the destination this row is pending for.
+    /// `Scrobbable.name` of the destination this row is pending for
     var serviceName: String
 
-    /// JSON-encoded `Scrobble` payload.
+    /// JSON-encoded `Scrobble` payload
     var payloadData: Data
 
-    /// How many submission attempts have already failed.
+    /// How many submission attempts have already failed
     var attempt: Int
 
-    /// Earliest time the next attempt should be made (drives backoff).
+    /// Earliest time the next attempt should be made
     var nextAttempt: Date
 
     var createdAt: Date

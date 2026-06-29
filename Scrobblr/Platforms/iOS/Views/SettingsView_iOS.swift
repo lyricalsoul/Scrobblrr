@@ -16,14 +16,8 @@ struct SettingsView: View {
     var body: some View {
         Form {
             ScrobblingSection(settings: settings)
+            CorrectionSection(settings: settings)
             AccountSection(scrobbler: scrobbler)
-            Section {
-                NavigationLink {
-                    CorrectionsListView()
-                } label: {
-                    Label("Corrections", systemImage: "character.book.closed")
-                }
-            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -51,11 +45,31 @@ private struct ScrobblingSection: View {
             }
             Stepper("Maximum: \(settings.maxScrobbleSeconds / 60) min", value: $settings.maxScrobbleSeconds, in: 60...600, step: 60)
             Stepper("Minimum length: \(settings.minTrackSeconds) s", value: $settings.minTrackSeconds, in: 0...120, step: 5)
-            Toggle("Correct artist names with on-device AI", isOn: $settings.useArtistFix)
         } header: {
             Text("Scrobbling")
         } footer: {
             Text("A track scrobbles once you've listened to this much of it, or after the maximum time — whichever comes first. Tracks shorter than the minimum are never scrobbled.")
+        }
+    }
+}
+
+// MARK: - Correction
+
+private struct CorrectionSection: View {
+    @Bindable var settings: Settings
+
+    var body: some View {
+        Section {
+            Toggle("Use Apple Intelligence to correct artist names", isOn: $settings.useArtistFix)
+            NavigationLink {
+                CorrectionsListView()
+            } label: {
+                Text("Saved Corrections")
+            }
+        } header: {
+            Text("Automatic Corrections")
+        } footer: {
+            Text("All corrections are made using Apple's on-device models and never leave your device. You can overwrite corrections made by AI or simple replacements by clicking in Saved Corrections.")
         }
     }
 }
@@ -74,16 +88,9 @@ private struct AccountSection: View {
                     scrobbler.signOut()
                 }
             } else {
-                Button("Sign In to Last.fm…", action: signIn)
-            }
-        }
-    }
-
-    private func signIn() {
-        Task {
-            let url = scrobbler.authorizationURL(callbackScheme: "scrobblr")
-            if let token = await webAuth.authenticate(url: url, callbackScheme: "scrobblr") {
-                try? await scrobbler.completeAuthentication(token: token)
+                Button("Sign In to Last.fm…") {
+                    Task { await webAuth.signIn(scrobbler) }
+                }
             }
         }
     }
@@ -147,7 +154,6 @@ private struct CorrectionEditor: View {
     @State private var doNotScrobble = false
     @State private var kind: CorrectionEntity = .artist
 
-    /// Called with the entered values; a `nil` replacement means "don't scrobble".
     let onAdd: (String, String?, CorrectionEntity) -> Void
 
     var body: some View {

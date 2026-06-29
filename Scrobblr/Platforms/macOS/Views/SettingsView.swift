@@ -85,7 +85,7 @@ private struct ScrobblingSettingsView: View {
             Section {
                 Stepper("Maximum: \(settings.maxScrobbleSeconds / 60) min", value: $settings.maxScrobbleSeconds, in: 60...600, step: 60)
             } footer: {
-                Text("Long tracks scrobble after this time even if the percentage hasn't been reached — whichever comes first.")
+                Text("Long tracks scrobble after this time even if the percentage hasn't been reached - whichever comes first.")
             }
 
             Section {
@@ -97,7 +97,7 @@ private struct ScrobblingSettingsView: View {
             Section {
                 Toggle("Correct artist names with on-device AI", isOn: $settings.useArtistFix)
             } footer: {
-                Text("Keeps only the primary artist when a track credits several, e.g. \u{201C}A, B & C\u{201D} \u{2192} \u{201C}A\u{201D}. Runs entirely on device.")
+                Text("Keeps only the primary artist when a track credits several, e.g. \"A, B & C\" becomes \"A\". Runs entirely on device.")
             }
         }
         .formStyle(.grouped)
@@ -108,6 +108,7 @@ private struct ScrobblingSettingsView: View {
 
 private struct AccountSettingsView: View {
     let scrobbler: LastFMScrobbler
+    @State private var webAuth = WebAuthCoordinator()
 
     var body: some View {
         Form {
@@ -117,21 +118,11 @@ private struct AccountSettingsView: View {
                     Button("Sign Out", role: .destructive) {
                         scrobbler.signOut()
                     }
-                } else if scrobbler.isAwaitingAuthorization {
-                    Text("Authorize Scroblrr in the browser, then finish signing in.")
-                        .foregroundStyle(.secondary)
-                    Button("Finish Sign-In") {
-                        Task { try? await scrobbler.finishAuthentication() }
-                    }
                 } else {
                     Text("Connect your Last.fm account to start scrobbling.")
                         .foregroundStyle(.secondary)
                     Button("Sign In to Last.fm…") {
-                        Task {
-                            if let url = try? await scrobbler.beginAuthentication() {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
+                        Task { await webAuth.signIn(scrobbler) }
                     }
                 }
             }
@@ -148,7 +139,7 @@ private struct CorrectionsSettingsView: View {
     @State private var selection: Set<PersistentIdentifier> = []
     @State private var selectedKind: CorrectionEntity = .artist
 
-    /// Rules belonging to the currently selected entity tab.
+    /// Rules belonging to the currently selected entity tab
     private var visibleRules: [AutoCorrect] {
         rules.filter { $0.kind == selectedKind }
     }
@@ -172,9 +163,7 @@ private struct CorrectionsSettingsView: View {
                     ))
                     .textFieldStyle(.plain)
                 }
-                TableColumn("Replacement") { rule in
-                    // An empty replacement means "don't scrobble" (stored as nil).
-                    TextField("Don't scrobble", text: Binding(
+                TableColumn("Replacement") { rule in                    TextField("Don't scrobble", text: Binding(
                         get: { rule.replacement ?? "" },
                         set: { rule.replacement = $0.isEmpty ? nil : $0; try? context.save() }
                     ))

@@ -4,13 +4,7 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-//  iOS playback source: observes Apple Music via MusicKit's SystemMusicPlayer
-//  and feeds it into the shared ``ScrobbleEngine``. A silent background audio
-//  session (``SilentAudioKeeper``) keeps the app alive to keep scrobbling.
-//
-//  NOTE: MusicKit exposes the system player only as Combine `ObservableObject`s
-//  (no async/Notification equivalent), so Combine is used here deliberately —
-//  it's the only observation API available — and kept confined to this file.
+// Consider using this on mac?
 
 #if os(iOS)
 import MusicKit
@@ -21,28 +15,34 @@ import os
 @Observable
 @MainActor
 final class MediaModel {
-    /// The currently playing track, for the UI.
+    /// The currently playing track
     var trackInfo: GenericPlaybackInfo? { engine.current }
 
-    /// Whether the user has granted MusicKit access. Drives the UI gate.
+    /// Whether the user has granted MusicKit access
     private(set) var isAuthorized = false
 
     @ObservationIgnored let engine: ScrobbleEngine
     @ObservationIgnored private let keeper = SilentAudioKeeper()
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
 
-    // Artwork arrives asynchronously (MusicKit gives a URL we must download),
-    // so it's tracked per-song and re-published once loaded.
     @ObservationIgnored private var currentSongID: MusicItemID?
     @ObservationIgnored private var currentArtwork: UIImage?
     @ObservationIgnored private var artworkTask: Task<Void, Never>?
+    @ObservationIgnored private var heartbeatTask: Task<Void, Never>?
+
+    private static let heartbeatInterval: Duration = .seconds(15)
 
     init(manager: ScrobblerManager, settings: Settings) {
         engine = ScrobbleEngine(manager: manager, settings: settings)
     }
 
+    deinit {
+        heartbeatTask?.cancel()
+        artworkTask?.cancel()
+    }
+
     /// Requests MusicKit access, starts the background audio keeper, and begins
-    /// observing the system player. Safe to call once on launch.
+    /// observing the system player
     func start() async {
         let status = await MusicAuthorization.request()
         isAuthorized = (status == .authorized)
@@ -53,7 +53,23 @@ final class MediaModel {
 
         keeper.start()
         observe()
+        startHeartbeat()
         publishCurrent()
+    }
+
+    // MARK: - Heartbeat
+
+    // TODO: is this the right thing?
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.heartbeatInterval)
+                guard !Task.isCancelled, let self else { return }
+                self.keeper.ensurePlaying()
+                self.publishCurrent()
+            }
+        }
     }
 
     // MARK: - Observation
@@ -61,14 +77,12 @@ final class MediaModel {
     private func observe() {
         let player = SystemMusicPlayer.shared
 
-        // Track / queue changes.
         player.queue.objectWillChange
             .sink { [weak self] _ in
                 Task { @MainActor in self?.publishCurrent() }
             }
             .store(in: &cancellables)
 
-        // Play / pause / stop changes.
         player.state.objectWillChange
             .sink { [weak self] _ in
                 Task { @MainActor in self?.publishCurrent() }
@@ -76,7 +90,6 @@ final class MediaModel {
             .store(in: &cancellables)
     }
 
-    /// Snapshots the current system-player state and feeds it to the engine.
     private func publishCurrent() {
         let player = SystemMusicPlayer.shared
 
@@ -88,7 +101,7 @@ final class MediaModel {
             return
         }
 
-        // A newly-seen song: reset artwork and kick off a fresh download.
+        // reset artwork and kick off a fresh download
         if song.id != currentSongID {
             currentSongID = song.id
             currentArtwork = nil
@@ -109,6 +122,7 @@ final class MediaModel {
 
     // MARK: - Artwork
 
+    // TODO: use a library for this
     private func loadArtwork(for song: Song) {
         artworkTask?.cancel()
         guard let artwork = song.artwork,
@@ -120,7 +134,7 @@ final class MediaModel {
                   let image = UIImage(data: data) else { return }
             guard !Task.isCancelled, let self, self.currentSongID == songID else { return }
             self.currentArtwork = image
-            // Re-publish so the engine/UI pick up the now-available artwork.
+            // force UI update w new artwork
             self.publishCurrent()
         }
     }

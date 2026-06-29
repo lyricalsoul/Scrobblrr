@@ -4,8 +4,7 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-//  Drives Last.fm sign-in via ASWebAuthenticationSession (iOS and macOS) and
-//  returns the token captured from the `scrobblr://auth?token=…` callback.
+
 
 import AuthenticationServices
 #if os(iOS)
@@ -17,8 +16,15 @@ import AppKit
 @MainActor
 final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentationContextProviding {
 
-    /// Presents `url` and returns the `token` query item from the callback,
-    /// or `nil` if the user cancelled or no token came back.
+    /// The custom URL scheme registered for the Last.fm auth callback
+    static let callbackScheme = "scrobblr"
+
+    func signIn(_ scrobbler: LastFMScrobbler) async {
+        let url = scrobbler.authorizationURL(callbackScheme: Self.callbackScheme)
+        guard let token = await authenticate(url: url, callbackScheme: Self.callbackScheme) else { return }
+        try? await scrobbler.completeAuthentication(token: token)
+    }
+
     func authenticate(url: URL, callbackScheme: String) async -> String? {
         await withCheckedContinuation { continuation in
             let session = ASWebAuthenticationSession(

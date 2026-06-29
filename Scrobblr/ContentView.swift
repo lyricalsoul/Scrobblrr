@@ -4,6 +4,7 @@ import SwiftData
 @main struct MyApp: App {
     @State private var manager: ScrobblerManager
     @State private var model: MediaModel
+    @State private var webAuth = WebAuthCoordinator()
     private let modelContainer: ModelContainer
     private let settings: Settings
 
@@ -50,17 +51,9 @@ import SwiftData
             let scrobbler = manager.lastFM
             if scrobbler.isAuthenticated {
                 Text("Signed in as \(scrobbler.username ?? "—")")
-            } else if scrobbler.isAwaitingAuthorization {
-                Button("Finish Last.fm Sign-In") {
-                    Task { try? await scrobbler.finishAuthentication() }
-                }
             } else {
                 Button("Sign In to Last.fm…") {
-                    Task {
-                        if let url = try? await scrobbler.beginAuthentication() {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
+                    Task { await webAuth.signIn(scrobbler) }
                 }
             }
             Divider()

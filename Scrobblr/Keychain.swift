@@ -4,17 +4,14 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-//  Minimal wrapper over the Security framework for storing small secrets
-//  (e.g. service session keys) as generic-password items.
 
 import Foundation
 import Security
 import os
 
 enum Keychain {
-    private static let service = "io.lyricalsoul.scroblrr.credentials"
+    private static let service = "io.lyricalsoul.Scrobblrr.credentials"
 
-    /// Stores `value` for `account`, or removes the item when `value` is nil.
     static func set(_ value: String?, for account: String) {
         guard let value, let data = value.data(using: .utf8) else {
             remove(account)

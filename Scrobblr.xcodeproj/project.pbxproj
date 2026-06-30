@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D523E9982FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D523E9972FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D523E99B2FF3507A00E41B9C /* Messages.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D57D8BF92FF333D500CAB313 /* Messages.framework */; };
 		D561310E2FE4C5A9005C1B3B /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = D5962ABF2FE4BF9B00E4D3B4 /* MediaRemoteAdapter */; };
 		D561318E2FE4D405005C1B3B /* SlayZ.icon in Resources */ = {isa = PBXBuildFile; fileRef = D561318D2FE4D405005C1B3B /* SlayZ.icon */; };
 		D57D8BD62FF3117500CAB313 /* CachedAsyncImage in Frameworks */ = {isa = PBXBuildFile; productRef = D57D8BD52FF3117500CAB313 /* CachedAsyncImage */; };
@@ -14,7 +16,26 @@
 		D5962AC12FE4BFA500E4D3B4 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = D5962ABF2FE4BF9B00E4D3B4 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		D523E9992FF3507A00E41B9C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D523E9962FF3507A00E41B9C;
+			remoteInfo = "Scrobblrr for iMessage MessagesExtension";
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXCopyFilesBuildPhase section */
+		D523E9A92FF3507B00E41B9C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				D523E9982FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
 		D558558C2FE333B200A7E05B /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
@@ -24,14 +45,32 @@
 			);
 			name = "Embed Frameworks";
 		};
+		D57D8C0B2FF333D700CAB313 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* Scrobblr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Scrobblr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D523E9972FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Scrobblrr for iMessage MessagesExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D5298E512FF37E0C00F440F8 /* Scrobblrr for iMessage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Scrobblrr for iMessage.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D561318D2FE4D405005C1B3B /* SlayZ.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = SlayZ.icon; sourceTree = "<group>"; };
+		D57D8BF92FF333D500CAB313 /* Messages.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Messages.framework; path = Library/Frameworks/Messages.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D523E9A52FF3507B00E41B9C /* Exceptions for "Scrobblrr iMessage Extension" folder in "Scrobblrr for iMessage MessagesExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D523E9962FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension */;
+		};
 		D55855A42FE3405200A7E05B /* Exceptions for "Scrobblr" folder in "Scrobblr" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -53,6 +92,19 @@
 			path = Scrobblr;
 			sourceTree = "<group>";
 		};
+		D523E9902FF3507800E41B9C /* Scrobblrr iMessage App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Scrobblrr iMessage App";
+			sourceTree = "<group>";
+		};
+		D523E99C2FF3507A00E41B9C /* Scrobblrr iMessage Extension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D523E9A52FF3507B00E41B9C /* Exceptions for "Scrobblrr iMessage Extension" folder in "Scrobblrr for iMessage MessagesExtension" target */,
+			);
+			path = "Scrobblrr iMessage Extension";
+			sourceTree = "<group>";
+		};
 		D57D8BCD2FF2618600CAB313 /* .github */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = .github;
@@ -69,6 +121,12 @@
 				D5962ABD2FE4BF7F00E4D3B4 /* LastFM in Frameworks */,
 			);
 		};
+		D523E9942FF3507A00E41B9C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				D523E99B2FF3507A00E41B9C /* Messages.framework in Frameworks */,
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -77,9 +135,12 @@
 			children = (
 				D57D8BCD2FF2618600CAB313 /* .github */,
 				000000000000000000000010 /* Scrobblr */,
+				D523E9902FF3507800E41B9C /* Scrobblrr iMessage App */,
+				D523E99C2FF3507A00E41B9C /* Scrobblrr iMessage Extension */,
 				D5962AD22FE4C56800E4D3B4 /* Frameworks */,
 				000000000000000000000020 /* Products */,
 				D561318D2FE4D405005C1B3B /* SlayZ.icon */,
+				D5DDC31F2FF367D600191C16 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -87,6 +148,8 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000120 /* Scrobblr.app */,
+				D523E9972FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex */,
+				D5298E512FF37E0C00F440F8 /* Scrobblrr for iMessage.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -94,8 +157,16 @@
 		D5962AD22FE4C56800E4D3B4 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				D57D8BF92FF333D500CAB313 /* Messages.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D5DDC31F2FF367D600191C16 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -109,6 +180,7 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				D558558C2FE333B200A7E05B /* Embed Frameworks */,
+				D57D8C0B2FF333D700CAB313 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -126,6 +198,44 @@
 			productReference = 000000000000000000000120 /* Scrobblr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D523E98E2FF3507800E41B9C /* Scrobblrr for iMessage */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D523E9AA2FF3507B00E41B9C /* Build configuration list for PBXNativeTarget "Scrobblrr for iMessage" */;
+			buildPhases = (
+				D523E98D2FF3507800E41B9C /* Resources */,
+				D523E9A92FF3507B00E41B9C /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D523E99A2FF3507A00E41B9C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D523E9902FF3507800E41B9C /* Scrobblrr iMessage App */,
+			);
+			name = "Scrobblrr for iMessage";
+			productName = "Scrobblrr for iMessage";
+			productReference = D5298E512FF37E0C00F440F8 /* Scrobblrr for iMessage.app */;
+			productType = "com.apple.product-type.application.messages";
+		};
+		D523E9962FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D523E9A62FF3507B00E41B9C /* Build configuration list for PBXNativeTarget "Scrobblrr for iMessage MessagesExtension" */;
+			buildPhases = (
+				D523E9932FF3507A00E41B9C /* Sources */,
+				D523E9942FF3507A00E41B9C /* Frameworks */,
+				D523E9952FF3507A00E41B9C /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				D523E99C2FF3507A00E41B9C /* Scrobblrr iMessage Extension */,
+			);
+			name = "Scrobblrr for iMessage MessagesExtension";
+			productName = "Scrobblrr for iMessage MessagesExtension";
+			productReference = D523E9972FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex */;
+			productType = "com.apple.product-type.app-extension.messages";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -133,11 +243,17 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2630;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					D523E98E2FF3507800E41B9C = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					D523E9962FF3507A00E41B9C = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -161,6 +277,8 @@
 			projectRoot = "";
 			targets = (
 				000000000000000100000000 /* Scrobblr */,
+				D523E98E2FF3507800E41B9C /* Scrobblrr for iMessage */,
+				D523E9962FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -172,6 +290,16 @@
 				D561318E2FE4D405005C1B3B /* SlayZ.icon in Resources */,
 			);
 		};
+		D523E98D2FF3507800E41B9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		D523E9952FF3507A00E41B9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -180,7 +308,20 @@
 			files = (
 			);
 		};
+		D523E9932FF3507A00E41B9C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D523E99A2FF3507A00E41B9C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D523E9962FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension */;
+			targetProxy = D523E9992FF3507A00E41B9C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000011000000 /* Debug configuration for PBXProject "Scrobblr" */ = {
@@ -360,14 +501,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
 			};
 			name = Debug;
 		};
@@ -416,14 +557,136 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+			};
+			name = Release;
+		};
+		D523E9A72FF3507B00E41B9C /* Debug configuration for PBXNativeTarget "Scrobblrr for iMessage MessagesExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9BJLQFBQT9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Scrobblrr for iMessage MessagesExtension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Scrobblrr for iMessage";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.lyricalsoul.Scrobblrr-for-iMessage.MessagesExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D523E9A82FF3507B00E41B9C /* Release configuration for PBXNativeTarget "Scrobblrr for iMessage MessagesExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9BJLQFBQT9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Scrobblrr for iMessage MessagesExtension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Scrobblrr for iMessage";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.lyricalsoul.Scrobblrr-for-iMessage.MessagesExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D523E9AB2FF3507B00E41B9C /* Debug configuration for PBXNativeTarget "Scrobblrr for iMessage" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9BJLQFBQT9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.lyricalsoul.Scrobblrr-for-iMessage";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D523E9AC2FF3507B00E41B9C /* Release configuration for PBXNativeTarget "Scrobblrr for iMessage" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9BJLQFBQT9;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.lyricalsoul.Scrobblrr-for-iMessage";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -443,6 +706,22 @@
 			buildConfigurations = (
 				000000000000000111000000 /* Debug configuration for PBXNativeTarget "Scrobblr" */,
 				000000000000000112000000 /* Release configuration for PBXNativeTarget "Scrobblr" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		D523E9A62FF3507B00E41B9C /* Build configuration list for PBXNativeTarget "Scrobblrr for iMessage MessagesExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D523E9A72FF3507B00E41B9C /* Debug configuration for PBXNativeTarget "Scrobblrr for iMessage MessagesExtension" */,
+				D523E9A82FF3507B00E41B9C /* Release configuration for PBXNativeTarget "Scrobblrr for iMessage MessagesExtension" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		D523E9AA2FF3507B00E41B9C /* Build configuration list for PBXNativeTarget "Scrobblrr for iMessage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D523E9AB2FF3507B00E41B9C /* Debug configuration for PBXNativeTarget "Scrobblrr for iMessage" */,
+				D523E9AC2FF3507B00E41B9C /* Release configuration for PBXNativeTarget "Scrobblrr for iMessage" */,
 			);
 			defaultConfigurationName = Release;
 		};

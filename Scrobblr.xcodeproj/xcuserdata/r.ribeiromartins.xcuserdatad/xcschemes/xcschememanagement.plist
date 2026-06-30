@@ -14,10 +14,38 @@
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
+		<key>Scrobblrr for iMessage MessagesExtension.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>3</integer>
+		</dict>
 		<key>Scroblrr.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>1</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>000000000000000100000000</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>D523E98E2FF3507800E41B9C</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>D523E9962FF3507A00E41B9C</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>D57D8BF72FF333D500CAB313</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>

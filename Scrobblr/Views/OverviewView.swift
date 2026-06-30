@@ -34,7 +34,19 @@ struct OverviewView: View {
                 emptyState.padding(.top, 80)
             }
         }
-        .background { backdrop }
+        .background {
+                CachedAsyncImage(url: manager.coverImageUrl) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .blur(radius: 120, opaque: true)
+                        .opacity(0.4)
+                } placeholder: {
+                    Color.clear
+                }
+                .clipped()
+                .ignoresSafeArea()
+        }
         .navigationTitle("Now Playing")
         #endif
     }

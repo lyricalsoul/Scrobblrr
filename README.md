@@ -1,19 +1,21 @@
 # Scrobblrr
-Yet another scrobbler app for Apple devices. Focused on compatibility with Apple Music this time around. 
+A scrobbler for macOS and iOS, focused on Apple Music support. Automatically fixes your tags, integrates with iMessage, and much more for a better listening experience.
 
-## Screenshots
-### macOS
-![](.github/image-3.png)
+![](.github/Frame.png)
 
-### iOS
+> [!WARNING]  
+> This is a work in progress! The UI may change, crashes may occur, and hell may break loose. Use at your own risk.
 
 ## Downloads
 - macOS: Download
 - iOS: Join the TestFlight program (for now.)..
 
 ## TODO
-- [ ] Clear up code
+- [ ] Clean up code
+- [ ] Test support on devices w/ no Apple Intelligence
 - [ ] Find an app icon
-- [ ] Enhance SilentAudioKeeper for better lifetime on iOS
-- [ ] Musicorum API integration
-- [ ] iMessage app for sending collages and now playing song info
+- [ ] Enhance SilentAudioKeeper for better life time on iOS
+- [X] Musicorum API integration
+- [ ] Actually push to App Store Connect
+- [ ] Add some requests to cache using NSCache
+- [ ] iMessage app for sending collages and now playing song info (getting there)

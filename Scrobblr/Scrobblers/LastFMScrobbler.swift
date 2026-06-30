@@ -10,6 +10,64 @@ import Observation
 import LastFM
 import os
 
+
+// makes it easier to render out the stuff in WeekView
+struct SimpleTopData {
+    let name: String
+    let artist: String?
+    let scrobbles: UInt
+    let image: LastFMImages
+}
+
+enum LastFMEntity: String, CaseIterable, Identifiable {
+    case artist = "Artist"
+    case album = "Album"
+    case track = "Track"
+    
+    var id: Self { self }
+    
+    var apiValue: String {
+        switch self {
+        case .artist: "artist"
+        case .album:  "album"
+        case .track:  "track"
+        }
+    }
+}
+
+enum LastFMPeriod: String, CaseIterable, Identifiable {
+    case week = "Last 7 Days"
+    case month = "Last 30 Days"
+    case threeMonths = "Last 90 Days"
+    case sixMonths = "Last 180 Days"
+    case twelveMonths = "Last Year"
+    case allTime = "All Time"
+    
+    var id: Self { self }
+    
+    func toLibPeriod() -> UserTopItemsParams.Period {
+        switch self {
+        case .allTime: return .overall
+        case .month: return .last30days
+        case .sixMonths: return .last180days
+        case .threeMonths: return .last90days
+        case .twelveMonths: return .lastYear
+        case .week: return .last7Days
+        }
+    }
+    
+    var apiValue: String {
+        switch self {
+        case .week:         "7day"
+        case .month:        "1month"
+        case .threeMonths:  "3month"
+        case .sixMonths:    "6month"
+        case .twelveMonths: "12month"
+        case .allTime:      "overall"
+        }
+    }
+}
+
 @Observable
 final class LastFMScrobbler: Scrobbable {
     let name = "Last.fm"
@@ -120,17 +178,54 @@ final class LastFMScrobbler: Scrobbable {
         }
     }
     
-    func getAlbumCover(name: String, artist: String) async -> URL? {
+    func getInfoFor(track: String, artist: String) async -> TrackInfo? {
         do {
-            let params = AlbumInfoParams(artist: artist, album: name, autocorrect: true, username: username)
-            let page = try await client.Album.getInfo(params: params)
-            guard let imageURL = page.image.extraLarge else {
-                return nil
-            }
-
-            return URL(string: imageURL.absoluteString.replacing("300x300", with: "1000x1000"))
+            let params = TrackInfoParams(artist: artist, track: track, autocorrect: true, username: username)
+            return try await client.Track.getInfo(params: params)
         } catch {
-            Logger.scrobbler.error("Couldn't fetch album cover: \(error.localizedDescription, privacy: .public)")
+            Logger.fm.error("Couldn't fetch track info: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+    
+    func getInfoFor(album: String, artist: String) async -> AlbumInfo? {
+        do {
+            let params = AlbumInfoParams(artist: artist, album: album, autocorrect: true, username: username)
+            return try await client.Album.getInfo(params: params)
+        } catch {
+            Logger.fm.error("Couldn't fetch album info: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+    
+    func getInfoFor(artist: String) async -> ArtistInfo? {
+        do {
+            let params = ArtistInfoParams(term: artist, criteria: .artist, autocorrect: true, username: username)
+            return try await client.Artist.getInfo(params: params)
+        } catch {
+            Logger.fm.error("Couldn't fetch artist info: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+    
+    func getUserTop(for entity: LastFMEntity, during period: LastFMPeriod, limit: UInt = 10) async -> [SimpleTopData]? {
+        do {
+            switch entity {
+            case .artist:
+                return try await client.User.getTopArtists(params: UserTopItemsParams(user: username!, period: period.toLibPeriod(), limit: UInt(limit)))
+                    .items
+                    .map { SimpleTopData(name: $0.name, artist: nil, scrobbles: $0.playcount, image: $0.image) }
+            case .album:
+                return try await client.User.getTopAlbums(params: UserTopItemsParams(user: username!, period: period.toLibPeriod(), limit: UInt(limit)))
+                    .items
+                    .map { SimpleTopData(name: $0.name, artist: $0.artist.name, scrobbles: $0.playcount, image: $0.image) }
+            case .track:
+                return try await client.User.getTopTracks(params: UserTopItemsParams(user: username!, period: period.toLibPeriod(), limit: UInt(limit)))
+                    .items
+                    .map { SimpleTopData(name: $0.name, artist: $0.artist.name, scrobbles: $0.playcount, image: $0.image) }
+            }
+        } catch {
+            Logger.fm.error("Couldn't fetch user top entities, \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

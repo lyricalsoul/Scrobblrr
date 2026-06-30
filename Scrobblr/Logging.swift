@@ -23,4 +23,8 @@ extension Logger {
     static let auth = Logger(subsystem: subsystem, category: "auth")
     /// Keychain access
     static let keychain = Logger(subsystem: subsystem, category: "keychain")
+    /// Last.fm functionality
+    static let fm = Logger(subsystem: subsystem, category: "lastfm")
+    /// Ditto collage generation
+    static let ditto = Logger(subsystem: subsystem, category: "ditto")
 }

@@ -19,6 +19,10 @@ class ScrobblerManager {
     private(set) var current: GenericPlaybackInfo?
     private(set) var coverImageUrl: URL? = nil
 
+    private(set) var currentTrackInfo: TrackInfo?
+    private(set) var currentAlbumInfo: AlbumInfo?
+    private(set) var currentArtistInfo: ArtistInfo?
+
     @ObservationIgnored let intelligence: AutoCorrector
 
     @ObservationIgnored let lastFM = LastFMScrobbler()
@@ -35,7 +39,6 @@ class ScrobblerManager {
     @ObservationIgnored private var currentTrackID: String?
     @ObservationIgnored private var wasPlaying = false
     @ObservationIgnored private var pendingScrobble: Scrobble?
-    @ObservationIgnored private var lastRaw: GenericPlaybackInfo?
     @ObservationIgnored private var didScrobbleCurrent = false
     @ObservationIgnored private var scrobbleTask: Task<Void, Never>?
 
@@ -273,13 +276,22 @@ class ScrobblerManager {
             let scrobble = await corrected(from: info)
             pendingScrobble = scrobble
             
-            if info.album != nil {
-                if let url = await lastFM.getAlbumCover(name: info.album!, artist: info.artist) {
-                    coverImageUrl = url
-                }
+            // Fetch the track, artist, and (optional) album metadata concurrently.
+            async let trackInfo = lastFM.getInfoFor(track: info.title, artist: info.artist)
+            async let artistInfo = lastFM.getInfoFor(artist: info.artist)
+            async let albumInfo: AlbumInfo? = {
+                guard let album = info.album else { return nil }
+                return await lastFM.getInfoFor(album: album, artist: info.artist)
+            }()
+
+            currentTrackInfo = await trackInfo
+            currentArtistInfo = await artistInfo
+            currentAlbumInfo = await albumInfo
+
+            coverImageUrl = currentAlbumInfo?.image.extraLarge.flatMap {
+                URL(string: $0.absoluteString.replacing("300x300", with: "600x600"))
             }
-            
-            
+
             // are we still playing the same thing after the model run?
             guard currentTrackID == info.id else { return }
             
@@ -322,7 +334,6 @@ class ScrobblerManager {
         currentTrackID = nil
         wasPlaying = false
         pendingScrobble = nil
-        lastRaw = nil
         didScrobbleCurrent = false
         current = nil
     }

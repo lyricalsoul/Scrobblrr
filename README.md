@@ -7,15 +7,14 @@ A scrobbler for macOS and iOS, focused on Apple Music support. Automatically fix
 > This is a work in progress! The UI may change, crashes may occur, and hell may break loose. Use at your own risk.
 
 ## Downloads
-- macOS: Download
-- iOS: Join the TestFlight program (for now.)..
+- macOS: [Download from GitHub](https://github.com/lyricalsoul/Scrobblrr/releases)
+- iOS: [Join the TestFlight beta](https://testflight.apple.com/join/tAWM91xVa)
 
 ## TODO
-- [ ] Clean up code
-- [ ] Test support on devices w/ no Apple Intelligence
+- [X] Clean up code
+- [X] Test support on devices w/ no Apple Intelligence
 - [ ] Find an app icon
 - [ ] Enhance SilentAudioKeeper for better life time on iOS
 - [X] Musicorum API integration
-- [ ] Actually push to App Store Connect
-- [ ] Add some requests to cache using NSCache
+- [X] Actually push to App Store Connect
 - [ ] iMessage app for sending collages and now playing song info (getting there)

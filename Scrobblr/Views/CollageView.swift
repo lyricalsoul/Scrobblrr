@@ -33,7 +33,6 @@ struct CollageView: View {
         #if os(macOS)
         HSplitView {
             controlsPane
-                .scrollContentBackground(.hidden)
                 .frame(minWidth: 280, idealWidth: 320, maxWidth: 380, maxHeight: .infinity)
 
             preview
@@ -41,18 +40,21 @@ struct CollageView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Collage")
+        .toolbar { generateButton }
         .background { AnimatedBackdrop(url: manager.coverImageUrl) }
         #else
-        VStack(spacing: 0) {
-            Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
                 controlSections
                 previewSection
             }
-            .scrollContentBackground(.hidden)
-            bottomBar
+            .padding(20)
         }
         .navigationTitle("Collage")
-        .toolbar { shareButton }
+        .toolbar {
+            generateButton
+            shareButton
+        }
         .background { AnimatedBackdrop(url: manager.coverImageUrl) }
         #endif
     }
@@ -61,18 +63,19 @@ struct CollageView: View {
 
     #if os(macOS)
     private var controlsPane: some View {
-        VStack(spacing: 0) {
-            Form { controlSections }
-                .formStyle(.grouped)
-            Divider()
-            bottomBar
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                controlSections
+                footerMessage
+            }
+            .padding(20)
         }
     }
     #endif
 
     @ViewBuilder
     private var controlSections: some View {
-        Section("Source") {
+        glassSection("Source") {
             Picker("Theme", selection: $theme) {
                 ForEach(CollageTheme.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -88,7 +91,7 @@ struct CollageView: View {
             }
         }
 
-        Section("Layout") {
+        glassSection("Layout") {
             if theme.supportsGrid {
                 Stepper("Rows: \(rows)", value: $rows, in: 1...maxGrid)
                 Stepper("Columns: \(columns)", value: $columns, in: 1...maxGrid)
@@ -103,23 +106,18 @@ struct CollageView: View {
         }
     }
 
-    private var bottomBar: some View {
-        VStack(spacing: 8) {
-            Button {
-                Task { await generate() }
-            } label: {
-                Label("Generate", systemImage: "wand.and.stars")
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal)
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(.horizontal)
-            .controlSize(.large)
-            .disabled(isGenerating || !isSignedIn)
+    private func glassSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
 
-            footerMessage
+            VStack(alignment: .leading, spacing: 14) {
+                content()
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(in: .rect(cornerRadius: 14))
         }
-        .padding()
     }
 
     @ViewBuilder
@@ -146,7 +144,6 @@ struct CollageView: View {
             ProgressView("Generating…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let url = generatedURL {
-            // TODO: this is still getting clipped on iOS...
             GeometryReader { geo in
                 let side = max(0, min(geo.size.width, geo.size.height) - 40)
                 collageImage(url: url)
@@ -167,20 +164,20 @@ struct CollageView: View {
     @ViewBuilder
     private var previewSection: some View {
         if isGenerating {
-            Section {
+            glassSection("Preview") {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical)
-                    .listRowBackground(Color.clear)
+                    .padding(.vertical, 24)
             }
         } else if let url = generatedURL {
-            Section("Preview") {
+            glassSection("Preview") {
                 collageImage(url: url)
                     .aspectRatio(1, contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: 420)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+        } else {
+            footerMessage
         }
     }
     #endif
@@ -194,6 +191,18 @@ struct CollageView: View {
             Rectangle()
                 .fill(.quaternary)
                 .overlay { ProgressView() }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var generateButton: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                Task { await generate() }
+            } label: {
+                Label("Generate", systemImage: "wand.and.stars")
+            }
+            .disabled(isGenerating || !isSignedIn)
         }
     }
 
@@ -232,7 +241,6 @@ struct CollageView: View {
                 showPlayCount: showPlayCount,
                 padded: padded
             )
-
 
             let (data, _) = try await URLSession.shared.data(from: remoteURL)
             let fileURL = FileManager.default.temporaryDirectory

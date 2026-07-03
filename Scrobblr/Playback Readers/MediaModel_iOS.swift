@@ -15,9 +15,6 @@ import os
 @Observable
 @MainActor
 final class MediaModel {
-    /// The current MusicKit authorization status. Seeded synchronously from the
-    /// system's cached status so the UI never flashes the "access needed" gate
-    /// before `start()` has had a chance to ask.
     private(set) var authorizationStatus: MusicAuthorization.Status = MusicAuthorization.currentStatus
 
     /// Whether the user has granted MusicKit access
@@ -31,6 +28,7 @@ final class MediaModel {
 
     @ObservationIgnored private var currentSongID: MusicItemID?
     @ObservationIgnored private var heartbeatTask: Task<Void, Never>?
+    @ObservationIgnored private var expandedArtistName: String?
 
     private static let heartbeatInterval: Duration = .seconds(15)
     
@@ -53,16 +51,18 @@ final class MediaModel {
             return
         }
 
-        keeper.start()
-        observe()
-        startHeartbeat()
-        publishCurrent()
+        Task {
+            keeper.start()
+            observe()
+            await startHeartbeat()
+            await publishCurrent()
+        }
     }
 
     // MARK: - Heartbeat
 
     // TODO: is this the right thing?
-    private func startHeartbeat() {
+    private func startHeartbeat() async {
         heartbeatTask?.cancel()
         heartbeatTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -72,7 +72,9 @@ final class MediaModel {
                 // UI can switch to the access gate cleanly instead of going stale.
                 self.authorizationStatus = MusicAuthorization.currentStatus
                 self.keeper.ensurePlaying()
-                self.publishCurrent()
+                let entry = SystemMusicPlayer.shared.queue.currentEntry
+                Logger.musicKit.debug("Heartbeat tick: currentEntry=\(entry?.id ?? "nil", privacy: .public) status=\(String(describing: SystemMusicPlayer.shared.state.playbackStatus), privacy: .public)")
+                await self.publishCurrent()
             }
         }
     }
@@ -84,36 +86,79 @@ final class MediaModel {
 
         player.queue.objectWillChange
             .sink { [weak self] _ in
-                Task { @MainActor in self?.publishCurrent() }
+                Task { @MainActor in await self?.publishCurrent() }
             }
             .store(in: &cancellables)
 
         player.state.objectWillChange
             .sink { [weak self] _ in
-                Task { @MainActor in self?.publishCurrent() }
+                Task { @MainActor in await self?.publishCurrent() }
             }
             .store(in: &cancellables)
     }
 
-    private func publishCurrent() {
-        let player = SystemMusicPlayer.shared
-
-        guard case let .song(song)? = player.queue.currentEntry?.item else {
-            manager.update(nil)
-            currentSongID = nil
+    private func publishCurrent() async {
+        if !isAuthorized {
             return
         }
 
-        // reset artwork and kick off a fresh download
-        if song.id != currentSongID {
-            currentSongID = song.id
+        let player = SystemMusicPlayer.shared
+
+        guard let item = player.queue.currentEntry?.item else {
+            manager.update(nil)
+            currentSongID = nil
+            expandedArtistName = nil
+            return
+        }
+
+        let title: String
+        let artistName: String
+        let album: String?
+        let duration: TimeInterval?
+
+        switch item {
+        case .song(let song):
+            title = song.title
+            artistName = song.artistName
+            album = song.albumTitle
+            duration = song.duration
+        case .musicVideo(let video):
+            title = video.title
+            artistName = video.artistName
+            album = video.albumTitle
+            duration = video.duration
+        @unknown default:
+            manager.update(nil)
+            currentSongID = nil
+            expandedArtistName = nil
+            return
+        }
+
+        if item.id != currentSongID {
+            let resolvedArtist: String?
+            switch item {
+            case .song(let song):
+                resolvedArtist = (try? await song.with([.artists]))?.artists?.first?.name
+            case .musicVideo(let video):
+                resolvedArtist = (try? await video.with([.artists]))?.artists?.first?.name
+            @unknown default:
+                resolvedArtist = nil
+            }
+
+            guard player.queue.currentEntry?.item?.id == item.id else { return }
+
+            currentSongID = item.id
+            expandedArtistName = resolvedArtist
+            if resolvedArtist == nil {
+                Logger.musicKit.error("Failed to fetch expanded artist info for \(title, privacy: .public)")
+            }
         }
 
         let info = GenericPlaybackInfo(
-            title: song.title,
-            artist: song.artistName,
-            album: song.albumTitle,
-            durationSeconds: Int(song.duration ?? 0),
+            title: title,
+            artist: expandedArtistName ?? artistName,
+            album: album,
+            durationSeconds: Int(duration ?? 0),
             elapsedTimeSeconds: Int(player.playbackTime),
             isPlaying: player.state.playbackStatus == .playing
         )

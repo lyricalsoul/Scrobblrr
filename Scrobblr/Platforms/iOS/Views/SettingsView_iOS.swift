@@ -16,7 +16,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             ScrobblingSection(settings: settings)
-            CorrectionSection(settings: settings)
+            CorrectionSection()
             AccountSection(scrobbler: scrobbler)
         }
         .navigationTitle("Settings")
@@ -56,11 +56,8 @@ private struct ScrobblingSection: View {
 // MARK: - Correction
 
 private struct CorrectionSection: View {
-    @Bindable var settings: Settings
-
     var body: some View {
         Section {
-            Toggle("Use Apple Intelligence to correct artist names", isOn: $settings.useArtistFix)
             NavigationLink {
                 CorrectionsListView()
             } label: {
@@ -69,7 +66,7 @@ private struct CorrectionSection: View {
         } header: {
             Text("Automatic Corrections")
         } footer: {
-            Text("All corrections are made using Apple's on-device models and never leave your device. You can overwrite corrections made by AI or simple replacements by clicking in Saved Corrections.")
+            Text("Corrections made automatically or by hand can be overwritten in Saved Corrections.")
         }
     }
 }

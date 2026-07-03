@@ -265,6 +265,7 @@ private struct StatRow<Leading: View>: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let track = GenericPlaybackInfo(
         title: "Underdressed at the Symphony",
@@ -279,3 +280,4 @@ private struct StatRow<Leading: View>: View {
     OverviewView(manager: .preview(current: track, coverImageUrl: cover))
         .preferredColorScheme(.dark)
 }
+#endif

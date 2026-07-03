@@ -18,6 +18,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D523E9962FF3507A00E41B9C"
                BuildableName = "Scrobblrr for iMessage MessagesExtension.appex"
+               BlueprintName = "Scrobblrr for iMessage MessagesExtension"
                ReferencedContainer = "container:Scrobblr.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -31,6 +32,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D523E98E2FF3507800E41B9C"
                BuildableName = "Scrobblrr for iMessage.app"
+               BlueprintName = "Scrobblrr for iMessage"
                ReferencedContainer = "container:Scrobblr.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -66,6 +68,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D523E98E2FF3507800E41B9C"
             BuildableName = "Scrobblrr for iMessage.app"
+            BlueprintName = "Scrobblrr for iMessage"
             ReferencedContainer = "container:Scrobblr.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -84,6 +87,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D523E98E2FF3507800E41B9C"
             BuildableName = "Scrobblrr for iMessage.app"
+            BlueprintName = "Scrobblrr for iMessage"
             ReferencedContainer = "container:Scrobblr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

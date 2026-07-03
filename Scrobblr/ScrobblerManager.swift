@@ -19,13 +19,22 @@ class ScrobblerManager {
     private(set) var current: GenericPlaybackInfo?
     private(set) var coverImageUrl: URL? = nil
 
-    private(set) var currentTrackInfo: TrackInfo?
-    private(set) var currentAlbumInfo: AlbumInfo?
-    private(set) var currentArtistInfo: ArtistInfo?
+    private(set) var currentInfo: EpistolaresTrackInfo?
 
+
+    var currentTrackScrobbles: Int? { currentInfo?.track.userScrobbles?.playCount }
+    var currentAlbumScrobbles: Int? { currentInfo?.album?.userScrobbles?.playCount }
+    var currentArtistScrobbles: Int? { currentInfo?.artist.userScrobbles?.playCount }
+    var currentArtistCoverURL: URL? { currentInfo?.artist.cover?.url() }
+    var albumOnlyCoverURL: URL? { currentInfo?.album?.cover?.url() ?? currentInfo?.track.cover?.url() }
+
+    #if os(macOS)
+    /// iOS doesnt need AI-based correction
     @ObservationIgnored let intelligence: AutoCorrector
+    #endif
 
     @ObservationIgnored let lastFM = LastFMScrobbler()
+    @ObservationIgnored let epistolares = Epistolares()
     @ObservationIgnored private var services: [any Scrobbable] { [lastFM] }
 
     @ObservationIgnored private let modelContainer: ModelContainer
@@ -50,7 +59,9 @@ class ScrobblerManager {
     
     init(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
+        #if os(macOS)
         self.intelligence = AutoCorrector(modelContainer: modelContainer)
+        #endif
         startRetryLoop()
     }
 
@@ -81,13 +92,14 @@ class ScrobblerManager {
     // MARK: - Correction
 
     private func corrected(from track: GenericPlaybackInfo) async -> Scrobble? {
-        guard let artist = scrobbleable(await intelligence.correct(artist: track.artist), original: track.artist),
-              let trackTitle = scrobbleable(await intelligence.correct(track: track.title), original: track.title)
+        let context = modelContainer.mainContext
+        guard let artist = scrobbleable(await correctedArtist(track.artist), original: track.artist),
+              let trackTitle = scrobbleable(TitleRules.correct(track: track.title, in: context), original: track.title)
         else { return nil }
 
         var album = track.album
         if let originalAlbum = track.album {
-            guard let correctedAlbum = scrobbleable(await intelligence.correct(album: originalAlbum), original: originalAlbum)
+            guard let correctedAlbum = scrobbleable(TitleRules.correct(album: originalAlbum, in: context), original: originalAlbum)
             else { return nil }
             album = correctedAlbum
         }
@@ -99,6 +111,15 @@ class ScrobblerManager {
             durationSeconds: track.durationSeconds,
             timestamp: Date(timeIntervalSinceNow: -Double(track.elapsedTimeSeconds))
         )
+    }
+
+    private func correctedArtist(_ artist: String) async -> CorrectedEntity {
+        #if os(macOS)
+        guard settings.useArtistFix else { return .from(original: artist) }
+        return await intelligence.correct(artist: artist)
+        #else
+        return .from(original: artist)
+        #endif
     }
 
     /// The corrected title to scrobble, or `nil`
@@ -274,30 +295,31 @@ class ScrobblerManager {
             pendingScrobble = nil
 
             let scrobble = await corrected(from: info)
-            pendingScrobble = scrobble
-            
-            // Fetch the track, artist, and (optional) album metadata concurrently.
-            async let trackInfo = lastFM.getInfoFor(track: info.title, artist: info.artist)
-            async let artistInfo = lastFM.getInfoFor(artist: info.artist)
-            async let albumInfo: AlbumInfo? = {
-                guard let album = info.album else { return nil }
-                return await lastFM.getInfoFor(album: album, artist: info.artist)
-            }()
 
-            currentTrackInfo = await trackInfo
-            currentArtistInfo = await artistInfo
-            currentAlbumInfo = await albumInfo
-
-            coverImageUrl = currentAlbumInfo?.image.extraLarge.flatMap {
-                URL(string: $0.absoluteString.replacing("300x300", with: "600x600"))
+            let fetchedInfo: EpistolaresTrackInfo?
+            do {
+                fetchedInfo = try await epistolares.trackInfo(
+                    track: scrobble?.track ?? info.title,
+                    artist: scrobble?.artist ?? info.artist,
+                    album: scrobble?.album ?? info.album,
+                    username: lastFM.username
+                )
+            } catch {
+                Logger.epistolares.error("Couldn't fetch track info: \(error.localizedDescription, privacy: .public)")
+                fetchedInfo = nil
             }
 
-            // are we still playing the same thing after the model run?
+            // still playing the same thing after waiting?
             guard currentTrackID == info.id else { return }
-            
-            // refresh with the up to date info
-            guard scrobble != nil else { return }
-            current = info.withMetadata(from: scrobble!)
+
+            pendingScrobble = scrobble
+            currentInfo = fetchedInfo
+
+            coverImageUrl = fetchedInfo?.album?.cover?.url()
+                ?? fetchedInfo?.track.cover?.url()
+                ?? fetchedInfo?.artist.cover?.url()
+
+            current = scrobble.map(info.withMetadata(from:)) ?? info
 
             if info.isPlaying {
                 Logger.playback.info("New track playing: \(info.displayName, privacy: .public)")
@@ -360,3 +382,19 @@ class ScrobblerManager {
         }
     }
 }
+
+#if DEBUG
+extension ScrobblerManager {
+    // used for SwiftUI previews
+    static func preview(current: GenericPlaybackInfo? = nil, coverImageUrl: URL? = nil) -> ScrobblerManager {
+        let container = try! ModelContainer(
+            for: AutoCorrect.self, Settings.self, QueuedScrobble.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let manager = ScrobblerManager(modelContainer: container)
+        manager.current = current
+        manager.coverImageUrl = coverImageUrl
+        return manager
+    }
+}
+#endif

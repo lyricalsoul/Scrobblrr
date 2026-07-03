@@ -178,24 +178,13 @@ struct SidebarNavigation: View {
             .navigationTitle("Scrobblrr")
             .scrollContentBackground(.hidden)
         } detail: {
-            (selection ?? .overview).destination(manager: manager, settings: settings)
-                .toolbarBackground(.hidden, for: .windowToolbar)
+            NavigationStack {
+                (selection ?? .overview).destination(manager: manager, settings: settings)
+                    .infoRouteDestination(manager: manager)
+                    .toolbarBackground(.hidden, for: .windowToolbar)
+            }
         }
-        .background { backdrop }
-    }
-    
-    private var backdrop: some View {
-        CachedAsyncImage(url: manager.coverImageUrl) { image in
-            image
-                .resizable()
-                .scaledToFill()
-                .blur(radius: 120, opaque: true)
-                .opacity(0.4)
-        } placeholder: {
-            Color.clear
-        }
-        .clipped()
-        .ignoresSafeArea()
+        .background { AnimatedBackdrop(url: manager.coverImageUrl) }
     }
 }
 #endif
@@ -212,6 +201,7 @@ struct TabNavigation: View {
             ForEach(AppSection.allCases) { section in
                 NavigationStack {
                     section.destination(manager: manager, settings: settings)
+                        .infoRouteDestination(manager: manager)
                 }
                 .tabItem { Label(section.rawValue, systemImage: section.symbol) }
                 .tag(section)

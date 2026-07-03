@@ -13,10 +13,11 @@ import os
 
 // makes it easier to render out the stuff in WeekView
 struct SimpleTopData {
+    let id: String?
     let name: String
     let artist: String?
     let scrobbles: UInt
-    let image: LastFMImages
+    let coverURL: URL?
 }
 
 enum LastFMEntity: String, CaseIterable, Identifiable {
@@ -44,18 +45,7 @@ enum LastFMPeriod: String, CaseIterable, Identifiable {
     case allTime = "All Time"
     
     var id: Self { self }
-    
-    func toLibPeriod() -> UserTopItemsParams.Period {
-        switch self {
-        case .allTime: return .overall
-        case .month: return .last30days
-        case .sixMonths: return .last180days
-        case .threeMonths: return .last90days
-        case .twelveMonths: return .lastYear
-        case .week: return .last7Days
-        }
-    }
-    
+
     var apiValue: String {
         switch self {
         case .week:         "7day"
@@ -74,6 +64,8 @@ final class LastFMScrobbler: Scrobbable {
 
     @ObservationIgnored
     private let client = LastFM(apiKey: Constants.lfmApiKey, apiSecret: Constants.lfmApiSecret)
+    @ObservationIgnored
+    private let epistolares = Epistolares()
 
     private(set) var username: String?
 
@@ -162,71 +154,18 @@ final class LastFMScrobbler: Scrobbable {
         guard let username else { return false }
 
         do {
-            let params = RecentTracksParams(user: username, limit: 2)
-            let page = try await client.User.getRecentTracks(params: params)
+            let page = try await epistolares.recentTracks(username: username, limit: 2)
             let tolerance: TimeInterval = 120
 
             return page.items.contains { item in
-                guard !item.nowPlaying, let date = item.date else { return false }
-                return item.name.caseInsensitiveCompare(scrobble.track) == .orderedSame
+                guard !item.nowPlaying, let playedAt = item.playedAt else { return false }
+                return item.track.name.caseInsensitiveCompare(scrobble.track) == .orderedSame
                     && item.artist.name.caseInsensitiveCompare(scrobble.artist) == .orderedSame
-                    && abs(date.timeIntervalSince(scrobble.timestamp)) <= tolerance
+                    && abs(playedAt.timeIntervalSince(scrobble.timestamp)) <= tolerance
             }
         } catch {
             Logger.scrobbler.error("Recent-tracks dedupe check failed: \(error.localizedDescription, privacy: .public). Will ignore")
             return false
-        }
-    }
-    
-    func getInfoFor(track: String, artist: String) async -> TrackInfo? {
-        do {
-            let params = TrackInfoParams(artist: artist, track: track, autocorrect: true, username: username)
-            return try await client.Track.getInfo(params: params)
-        } catch {
-            Logger.fm.error("Couldn't fetch track info: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-    
-    func getInfoFor(album: String, artist: String) async -> AlbumInfo? {
-        do {
-            let params = AlbumInfoParams(artist: artist, album: album, autocorrect: true, username: username)
-            return try await client.Album.getInfo(params: params)
-        } catch {
-            Logger.fm.error("Couldn't fetch album info: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-    
-    func getInfoFor(artist: String) async -> ArtistInfo? {
-        do {
-            let params = ArtistInfoParams(term: artist, criteria: .artist, autocorrect: true, username: username)
-            return try await client.Artist.getInfo(params: params)
-        } catch {
-            Logger.fm.error("Couldn't fetch artist info: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-    
-    func getUserTop(for entity: LastFMEntity, during period: LastFMPeriod, limit: UInt = 10) async -> [SimpleTopData]? {
-        do {
-            switch entity {
-            case .artist:
-                return try await client.User.getTopArtists(params: UserTopItemsParams(user: username!, period: period.toLibPeriod(), limit: UInt(limit)))
-                    .items
-                    .map { SimpleTopData(name: $0.name, artist: nil, scrobbles: $0.playcount, image: $0.image) }
-            case .album:
-                return try await client.User.getTopAlbums(params: UserTopItemsParams(user: username!, period: period.toLibPeriod(), limit: UInt(limit)))
-                    .items
-                    .map { SimpleTopData(name: $0.name, artist: $0.artist.name, scrobbles: $0.playcount, image: $0.image) }
-            case .track:
-                return try await client.User.getTopTracks(params: UserTopItemsParams(user: username!, period: period.toLibPeriod(), limit: UInt(limit)))
-                    .items
-                    .map { SimpleTopData(name: $0.name, artist: $0.artist.name, scrobbles: $0.playcount, image: $0.image) }
-            }
-        } catch {
-            Logger.fm.error("Couldn't fetch user top entities, \(error.localizedDescription, privacy: .public)")
-            return nil
         }
     }
 }

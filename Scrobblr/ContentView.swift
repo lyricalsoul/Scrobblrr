@@ -79,7 +79,7 @@ import CachedAsyncImage
 // MARK: - Sections
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case overview = "Overview"
+    case overview = "Now Playing"
     case week     = "Your Week"
     case collage  = "Collage"
     case settings = "Settings"

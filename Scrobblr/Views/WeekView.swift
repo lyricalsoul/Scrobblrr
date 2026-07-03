@@ -8,7 +8,7 @@
 
 import SwiftUI
 import CachedAsyncImage
-import LastFM
+import os
 
 struct WeekView: View {
     let manager: ScrobblerManager
@@ -27,16 +27,17 @@ struct WeekView: View {
             .navigationTitle("Your stats on Last.fm")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Picker("Period", selection: $period) {
-                        Text("Last 7 Days").tag(LastFMPeriod.week)
-                        Text("Last 30 Days").tag(LastFMPeriod.month)
-                        Text("Last 90 Days").tag(LastFMPeriod.threeMonths)
-                        Text("Last 180 Days").tag(LastFMPeriod.sixMonths)
-                        Text("Last Year").tag(LastFMPeriod.twelveMonths)
-                        Text("All Time").tag(LastFMPeriod.allTime)
+                    Menu {
+                        ForEach(LastFMPeriod.allCases) { candidate in
+                            Button(candidate.rawValue) { period = candidate }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(period.rawValue)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                     }
-                    .pickerStyle(.menu)
-                    .fixedSize()
                 }
             }
             .task(id: period) {
@@ -47,29 +48,30 @@ struct WeekView: View {
                     ProgressView()
                 }
             }
+            #if os(iOS)
+            .background { AnimatedBackdrop(url: manager.coverImageUrl) }
+            #endif
     }
 
     @ViewBuilder
     private var columns: some View {
         #if os(macOS)
-        HStack(spacing: 0) {
-            artistList
-            Divider()
-            albumList
-            Divider()
-            trackList
+        HStack(alignment: .top, spacing: 20) {
+            artistColumn
+            albumColumn
+            trackColumn
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .ignoresSafeArea(edges: .bottom)
         #else
-        List {
-            Section("Top artists") {
-                ForEach(topArtists, id: \.name) { ArtistRow(data: $0) }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                artistColumn
+                albumColumn
+                trackColumn
             }
-            Section("Top albums") {
-                ForEach(topAlbums, id: \.name) { AlbumRow(data: $0) }
-            }
-            Section("Top tracks") {
-                ForEach(topTracks, id: \.name) { TrackRow(data: $0) }
-            }
+            .padding(20)
         }
         #endif
     }
@@ -77,76 +79,107 @@ struct WeekView: View {
     // MARK: - Data Fetching
     
     private func fetchTopData() async {
+        guard let username = manager.lastFM.username else {
+            topArtists = []; topAlbums = []; topTracks = []
+            return
+        }
+
         isLoading = true
-        
-        // fire all three requests concurrently
-        async let fetchedArtists = manager.lastFM.getUserTop(for: .artist, during: period)
-        async let fetchedAlbums = manager.lastFM.getUserTop(for: .album, during: period)
-        async let fetchedTracks = manager.lastFM.getUserTop(for: .track, during: period)
-        
-        topArtists = (await fetchedArtists) ?? []
-        topAlbums = (await fetchedAlbums) ?? []
-        topTracks = (await fetchedTracks) ?? []
-        
-        isLoading = false
+        defer { isLoading = false }
+
+        do {
+            let charts = try await manager.epistolares.userChartsAll(username: username, period: period, limit: 10)
+            topArtists = charts.artists.items.map(SimpleTopData.init)
+            topAlbums = charts.albums.items.map(SimpleTopData.init)
+            topTracks = charts.tracks.items.map(SimpleTopData.init)
+        } catch {
+            Logger.epistolares.error("Couldn't fetch charts: \(error.localizedDescription, privacy: .public)")
+            topArtists = []; topAlbums = []; topTracks = []
+        }
     }
 
     // MARK: - Columns (macOS)
 
-    private var artistList: some View {
-        List {
-            Section("Top artists") {
-                ForEach(topArtists, id: \.name) { artist in
+    private var artistColumn: some View {
+        chartColumn(title: "Top artists", items: topArtists) { artist in
+            if let id = artist.id {
+                NavigationLink(value: InfoRoute.artist(id: id, name: artist.name)) {
                     ArtistRow(data: artist)
-                        .contextMenu {
-                            Button("View artist") {}
-                            Button("Copy name") {}
-                        }
                 }
+                .buttonStyle(.plain)
+            } else {
+                ArtistRow(data: artist)
             }
         }
-        .listStyle(.inset)
     }
 
-    private var albumList: some View {
-        List {
-            Section("Top albums") {
-                ForEach(topAlbums, id: \.name) { album in
+    private var albumColumn: some View {
+        chartColumn(title: "Top albums", items: topAlbums) { album in
+            if let id = album.id {
+                NavigationLink(value: InfoRoute.album(id: id, name: album.name)) {
                     AlbumRow(data: album)
-                        .contextMenu {
-                            Button("View album") {}
-                            Button("Copy title") {}
-                        }
                 }
+                .buttonStyle(.plain)
+            } else {
+                AlbumRow(data: album)
             }
         }
-        .listStyle(.inset)
     }
 
-    private var trackList: some View {
-        List {
-            Section("Top tracks") {
-                ForEach(topTracks, id: \.name) { track in
+    private var trackColumn: some View {
+        chartColumn(title: "Top tracks", items: topTracks) { track in
+            if let id = track.id {
+                NavigationLink(value: InfoRoute.track(id: id, name: track.name)) {
                     TrackRow(data: track)
-                        .contextMenu {
-                            Button("View track") {}
-                            Button("Copy title") {}
-                        }
                 }
+                .buttonStyle(.plain)
+            } else {
+                TrackRow(data: track)
             }
         }
-        .listStyle(.inset)
+    }
+
+    private func chartColumn<Row: View>(
+        title: String,
+        items: [SimpleTopData],
+        @ViewBuilder row: @escaping (SimpleTopData) -> Row
+    ) -> some View {
+        #if os(macOS)
+        ScrollView {
+            chartSection(title: title, items: items, row: row)
+                .padding(.bottom, 20)
+        }
+        .scrollEdgeEffectHidden(true, for: .bottom)
+        .frame(maxWidth: .infinity)
+        #else
+        chartSection(title: title, items: items, row: row)
+        #endif
+    }
+
+    private func chartSection<Row: View>(
+        title: String,
+        items: [SimpleTopData],
+        @ViewBuilder row: @escaping (SimpleTopData) -> Row
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
+
+            DividedGlassCard(items: items, dividerLeadingInset: 54) { item in
+                row(item)
+                    .padding(.horizontal, 14)
+            }
+        }
     }
 }
 
 // MARK: - Rows
 
-// TODO: artist and track images won't show because we need to use entity.getInfo - the image supplied is empty.
 private struct ArtistRow: View {
     let data: SimpleTopData
     var body: some View {
         HStack(spacing: 10) {
-            CachedAsyncImage(url: data.image.large) { image in
+            CachedAsyncImage(url: data.coverURL) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -165,7 +198,7 @@ private struct ArtistRow: View {
             }
             Spacer()
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 10)
     }
 }
 
@@ -173,7 +206,7 @@ private struct AlbumRow: View {
     let data: SimpleTopData
     var body: some View {
         HStack(spacing: 10) {
-            CachedAsyncImage(url: data.image.large) { image in
+            CachedAsyncImage(url: data.coverURL) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -195,7 +228,7 @@ private struct AlbumRow: View {
             Spacer()
             Text("\(data.scrobbles) scrobbles").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 10)
     }
 }
 
@@ -203,7 +236,7 @@ private struct TrackRow: View {
     let data: SimpleTopData
     var body: some View {
         HStack(spacing: 10) {
-            CachedAsyncImage(url: data.image.large) { image in
+            CachedAsyncImage(url: data.coverURL) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -225,6 +258,6 @@ private struct TrackRow: View {
             Spacer()
             Text("\(data.scrobbles) scrobbles").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 10)
     }
 }

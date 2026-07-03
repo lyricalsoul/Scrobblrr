@@ -8,7 +8,6 @@
 import SwiftUI
 import SwiftData
 import CachedAsyncImage
-import LastFM
 
 struct OverviewView: View {
     let manager: ScrobblerManager
@@ -35,17 +34,7 @@ struct OverviewView: View {
             }
         }
         .background {
-                CachedAsyncImage(url: manager.coverImageUrl) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .blur(radius: 120, opaque: true)
-                        .opacity(0.4)
-                } placeholder: {
-                    Color.clear
-                }
-                .clipped()
-                .ignoresSafeArea()
+            AnimatedBackdrop(url: manager.coverImageUrl)
         }
         .navigationTitle("Now Playing")
         #endif
@@ -64,8 +53,7 @@ struct OverviewView: View {
 
     #if os(macOS)
     private func macCard(for track: GenericPlaybackInfo, in size: CGSize) -> some View {
-        let ideal = min(size.width * 0.42, size.height - 56)
-        let side = max(240, min(ideal, 480))
+        let side = InfoMetrics.macCoverSide(for: size)
 
         return HStack(alignment: .top, spacing: 28) {
             albumArtImage
@@ -123,27 +111,51 @@ struct OverviewView: View {
 
     private func statsCard(for track: GenericPlaybackInfo) -> some View {
         VStack(spacing: 0) {
-            StatRow(
+            let trackRow = StatRow(
                 leading: iconBadge("music.note"),
                 title: track.title,
-                count: manager.currentTrackInfo?.userPlaycount
+                count: manager.currentTrackScrobbles
             )
+            if let trackID = manager.currentInfo?.track.id {
+                NavigationLink(value: InfoRoute.track(id: trackID, name: track.title)) {
+                    trackRow
+                }
+                .buttonStyle(.plain)
+            } else {
+                trackRow
+            }
 
             if let album = track.album, !album.isEmpty {
                 rowDivider
-                StatRow(
+                let albumRow = StatRow(
                     leading: coverThumb(size: 34),
                     title: album,
-                    count: manager.currentAlbumInfo?.userPlaycount
+                    count: manager.currentAlbumScrobbles
                 )
+                if let albumID = manager.currentInfo?.album?.id {
+                    NavigationLink(value: InfoRoute.album(id: albumID, name: album)) {
+                        albumRow
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    albumRow
+                }
             }
 
             rowDivider
-            StatRow(
+            let artistRow = StatRow(
                 leading: artistPhoto(size: 34),
                 title: track.artist,
-                count: manager.currentArtistInfo?.stats.userPlaycount
+                count: manager.currentArtistScrobbles
             )
+            if let artistID = manager.currentInfo?.artist.id {
+                NavigationLink(value: InfoRoute.artist(id: artistID, name: track.artist)) {
+                    artistRow
+                }
+                .buttonStyle(.plain)
+            } else {
+                artistRow
+            }
         }
         .glassEffect(in: .rect(cornerRadius: 14))
     }
@@ -169,11 +181,13 @@ struct OverviewView: View {
                         .foregroundStyle(.secondary)
                 )
         }
+        .id(manager.coverImageUrl)
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.4), value: manager.coverImageUrl)
     }
 
-    /// Small album cover used as the album stat row's leading thumbnail
     private func coverThumb(size: CGFloat) -> some View {
-        CachedAsyncImage(url: manager.coverImageUrl) { image in
+        CachedAsyncImage(url: manager.albumOnlyCoverURL) { image in
             image
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -198,10 +212,7 @@ struct OverviewView: View {
     }
 
     private func artistPhoto(size: CGFloat) -> some View {
-        let images = manager.currentArtistInfo?.image
-        let url = images?.mega ?? images?.extraLarge ?? images?.large
-
-        return CachedAsyncImage(url: url) { image in
+        CachedAsyncImage(url: manager.currentArtistCoverURL) { image in
             image
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -255,13 +266,16 @@ private struct StatRow<Leading: View>: View {
 }
 
 #Preview {
-    let container = try! ModelContainer(
-        for: AutoCorrect.self, Settings.self, QueuedScrobble.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    let track = GenericPlaybackInfo(
+        title: "Underdressed at the Symphony",
+        artist: "Faye Webster",
+        album: "Underdressed at the Symphony",
+        durationSeconds: 200,
+        elapsedTimeSeconds: 42,
+        isPlaying: true
     )
+    let cover = URL(string: "https://m.media-amazon.com/images/I/91RKxwbtb8L._UF1000,1000_QL80_.jpg")
 
-    let settings = Settings.shared(in: container.mainContext)
-    let manager = ScrobblerManager(modelContainer: container)
-
-    //RootView(manager: manager, settings: settings)
+    OverviewView(manager: .preview(current: track, coverImageUrl: cover))
+        .preferredColorScheme(.dark)
 }

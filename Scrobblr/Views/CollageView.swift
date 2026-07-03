@@ -41,16 +41,19 @@ struct CollageView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Collage")
+        .background { AnimatedBackdrop(url: manager.coverImageUrl) }
         #else
         VStack(spacing: 0) {
             Form {
                 controlSections
                 previewSection
             }
+            .scrollContentBackground(.hidden)
             bottomBar
         }
         .navigationTitle("Collage")
         .toolbar { shareButton }
+        .background { AnimatedBackdrop(url: manager.coverImageUrl) }
         #endif
     }
 

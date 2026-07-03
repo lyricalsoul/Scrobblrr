@@ -32,6 +32,7 @@ struct Ditto {
     let username: String
 
     // TODO: super users should be able to change this in the settings
+    // TODO: move this to constants, same thing as epistolaresBaseURL
     private static let endpoint = URL(string: "https://ditto-stg.musicorum.cloud/generate")!
 
     init(username: String) {
@@ -120,7 +121,6 @@ private struct CollageData: Encodable {
 struct GenerateResponse: Decodable {
     let error: Bool
     let message: String?
-    let file: String?
     let url: URL?
     let time: Int?
 }

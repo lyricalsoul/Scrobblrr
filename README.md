@@ -8,7 +8,7 @@ A scrobbler for macOS and iOS, focused on Apple Music support. Automatically fix
 
 ## Downloads
 - macOS: [Download from GitHub](https://github.com/lyricalsoul/Scrobblrr/releases)
-- iOS: [Join the TestFlight beta](https://testflight.apple.com/join/tAWM91xVa)
+- iOS: [Join the TestFlight beta](https://testflight.apple.com/join/tAWM91xV)
 
 ## TODO
 - [X] Clean up code

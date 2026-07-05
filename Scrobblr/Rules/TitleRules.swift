@@ -40,7 +40,7 @@ enum TitleRules {
 
     private static func trailingNoiseRegex(_ keywords: [String]) -> Regex<AnyRegexOutput> {
         let alt = keywords.joined(separator: "|")
-        let pattern = "\\s*(?:[\\(\\[][^\\)\\]]*(?:\(alt))[^\\)\\]]*[\\)\\]]|-\\s+[^-]*(?:\(alt))[^-]*)\\s*$"
+        let pattern = "\\s*(?:[\\(\\[][^\\)\\]]*(?:\(alt))[^\\)\\]]*[\\)\\]]|\\s+-\\s+[^-]*(?:\(alt))[^-]*)\\s*$"
         return try! Regex(pattern).ignoresCase()
     }
 

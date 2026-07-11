@@ -32,13 +32,12 @@ struct Ditto {
     let username: String
 
     // TODO: super users should be able to change this in the settings
-    // TODO: move this to constants, same thing as epistolaresBaseURL
-    private static let endpoint = URL(string: "https://ditto-stg.musicorum.cloud/generate")!
 
     init(username: String) {
         self.username = username
     }
 
+    func generateCollage(
     func generateCollage(
         theme: CollageTheme,
         entity: LastFMEntity,
@@ -63,7 +62,7 @@ struct Ditto {
         )
 
         // TODO: NOOOO! i need a real request lib for caching
-        var request = URLRequest(url: Self.endpoint)
+        var request = URLRequest(url: Constants.dittoBaseURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(GenerateRequest(theme: theme.apiValue, data: data))

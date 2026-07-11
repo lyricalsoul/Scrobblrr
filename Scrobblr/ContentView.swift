@@ -56,10 +56,12 @@ import CachedAsyncImage
 
             if settings.showNowPlayingInMenu {
                 Text(manager.current?.displayName ?? "No playback detected")
+                if settings.discordPresenceEnabled {
+                    discordStatusLabel
+                }
                 Divider()
             }
-
-
+            
             SettingsLink {
                 Text("Settings…")
             }
@@ -74,6 +76,22 @@ import CachedAsyncImage
         }
         #endif
     }
+
+    #if os(macOS)
+    @ViewBuilder
+    private var discordStatusLabel: some View {
+        switch manager.discordPresence.status {
+        case .disabled:
+            Label("Discord integration disabled", systemImage: "circle")
+        case .connecting:
+            Label("Connecting to Discord...", systemImage: "circle.dotted")
+        case .connected:
+            Label("Broadcasting to Discord", systemImage: "checkmark.circle.fill")
+        case .error(let message):
+            Label("Discord: \(message)", systemImage: "exclamationmark.circle.fill")
+        }
+    }
+    #endif
 }
 
 // MARK: - Sections

@@ -57,6 +57,12 @@ private struct GeneralSettingsView: View {
             Section {
                 Toggle("Show current track in the menu", isOn: $settings.showNowPlayingInMenu)
             }
+
+            Section {
+                Toggle("Show Discord Rich Presence", isOn: $settings.discordPresenceEnabled)
+            } footer: {
+                Text("Broadcasts what you're listening to on Discord. Requires the Discord app to be running.")
+            }
         }
         .formStyle(.grouped)
     }

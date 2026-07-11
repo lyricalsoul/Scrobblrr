@@ -33,4 +33,6 @@ extension Logger {
     static let ditto = Logger(subsystem: subsystem, category: "ditto")
     /// MusicKit integration
     static let musicKit = Logger(subsystem: subsystem, category: "musickit")
+    /// Discord Rich Presence
+    static let discord = Logger(subsystem: subsystem, category: "discord")
 }

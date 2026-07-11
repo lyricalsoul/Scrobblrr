@@ -1,6 +1,15 @@
 {
-  "originHash" : "4e6c5e33f2f189bcd47f93f82117f1b43481393c1e17c5b7839fd1864de935b4",
+  "originHash" : "5f681feaa579ec01d6a75a030c175fcdf20603fa614862f1e41d430b925a8a29",
   "pins" : [
+    {
+      "identity" : "bluesocket",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Kitura/BlueSocket",
+      "state" : {
+        "revision" : "7b23a867008e0027bfd6f4d398d44720707bc8ca",
+        "version" : "2.0.4"
+      }
+    },
     {
       "identity" : "lastfm.swift",
       "kind" : "remoteSourceControl",
@@ -26,6 +35,14 @@
       "state" : {
         "revision" : "eb7b2fcf534b0293e11e139866c5117bc56e7695",
         "version" : "0.7.1"
+      }
+    },
+    {
+      "identity" : "swiftrpc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/lyricalsoul/swiftrpc",
+      "state" : {
+        "revision" : "2d18aa9661ea887c3293810d05f2ef7ea36155a7"
       }
     },
     {

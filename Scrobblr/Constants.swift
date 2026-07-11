@@ -13,6 +13,9 @@ struct Constants {
 
     
     static let epistolaresBaseURL = URL(string: "https://epistolares.stg.musicorum.cloud")!
+    static let dittoBaseURL = URL(string: "https://ditto.stg.musicorum.cloud")!
 
     static let epistolaresCoverSize = 1000
+
+    static let discordAppId = "1525256894623649792"
 }

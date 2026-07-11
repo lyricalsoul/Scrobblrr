@@ -183,6 +183,15 @@ enum EpistolaresError: LocalizedError {
 struct Epistolares {
     private static let baseURL = Constants.epistolaresBaseURL
 
+    private static let trackInfoCache = NSCache<NSString, TrackInfoCacheEntry>()
+    private static let trackInfoTTL: TimeInterval = 300
+
+    private final class TrackInfoCacheEntry {
+        let value: EpistolaresTrackInfo
+        let cachedAt = Date()
+        init(_ value: EpistolaresTrackInfo) { self.value = value }
+    }
+
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -192,6 +201,9 @@ struct Epistolares {
     // MARK: - Methofs
 
     func trackInfo(track: String, artist: String, album: String? = nil, username: String? = nil) async throws -> EpistolaresTrackInfo {
+        let key = "track|\(track)|\(artist)|\(album ?? "")|\(username ?? "")" as NSString
+        if let cached = cachedTrackInfo(for: key) { return cached }
+
         var items = [
             URLQueryItem(name: "track", value: track),
             URLQueryItem(name: "artist", value: artist),
@@ -199,13 +211,27 @@ struct Epistolares {
         if let album { items.append(URLQueryItem(name: "album", value: album)) }
         if let username { items.append(URLQueryItem(name: "username", value: username)) }
 
-        return try await get("/track/info", query: items)
+        let result: EpistolaresTrackInfo = try await get("/track/info", query: items)
+        Self.trackInfoCache.setObject(TrackInfoCacheEntry(result), forKey: key)
+        return result
     }
 
     func trackInfo(id: String, username: String? = nil) async throws -> EpistolaresTrackInfo {
+        let key = "id|\(id)|\(username ?? "")" as NSString
+        if let cached = cachedTrackInfo(for: key) { return cached }
+
         var items = [URLQueryItem(name: "id", value: id)]
         if let username { items.append(URLQueryItem(name: "username", value: username)) }
-        return try await get("/track/info", query: items)
+        let result: EpistolaresTrackInfo = try await get("/track/info", query: items)
+        Self.trackInfoCache.setObject(TrackInfoCacheEntry(result), forKey: key)
+        return result
+    }
+
+    private func cachedTrackInfo(for key: NSString) -> EpistolaresTrackInfo? {
+        guard let entry = Self.trackInfoCache.object(forKey: key),
+              Date().timeIntervalSince(entry.cachedAt) < Self.trackInfoTTL
+        else { return nil }
+        return entry.value
     }
 
     func artistInfo(id: String, username: String? = nil) async throws -> EpistolaresArtistInfo {
@@ -243,7 +269,7 @@ struct Epistolares {
 
         guard let url = components.url else { throw EpistolaresError.badResponse }
 
-        var request = URLRequest(url: url)
+        let request = URLRequest(url: url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 

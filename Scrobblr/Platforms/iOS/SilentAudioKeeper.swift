@@ -45,6 +45,17 @@ final class SilentAudioKeeper {
         configureAndPlay()
     }
 
+    func cycleSession() {
+        Logger.playback.info("Attempting MusicKit reconnect")
+        player?.stop()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            configureAndPlay()
+        }
+    }
+
     private func configureAndPlay() {
         guard let url = Bundle.main.url(forResource: "silence", withExtension: "mp3") else {
             assertionFailure("silence.mp3 not found in bundle")

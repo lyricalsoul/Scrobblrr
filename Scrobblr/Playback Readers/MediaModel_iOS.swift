@@ -31,6 +31,11 @@ final class MediaModel {
     @ObservationIgnored private var expandedArtistName: String?
 
     private static let heartbeatInterval: Duration = .seconds(15)
+
+    @ObservationIgnored private var nilEntryStreak = 0
+    @ObservationIgnored private var lastRecoveryAttempt: Date?
+    private static let staleEntryThreshold = 5
+    private static let recoveryCooldown: TimeInterval = 120
     
     private let manager: ScrobblerManager
 
@@ -74,9 +79,26 @@ final class MediaModel {
                 self.keeper.ensurePlaying()
                 let entry = SystemMusicPlayer.shared.queue.currentEntry
                 Logger.musicKit.debug("Heartbeat tick: currentEntry=\(entry?.id ?? "nil", privacy: .public) status=\(String(describing: SystemMusicPlayer.shared.state.playbackStatus), privacy: .public)")
+                self.trackStaleness(entry: entry)
                 await self.publishCurrent()
             }
         }
+    }
+
+    private func trackStaleness(entry: MusicPlayer.Queue.Entry?) {
+        guard entry == nil else {
+            nilEntryStreak = 0
+            return
+        }
+
+        nilEntryStreak += 1
+        guard nilEntryStreak >= Self.staleEntryThreshold else { return }
+
+        if let last = lastRecoveryAttempt, Date().timeIntervalSince(last) < Self.recoveryCooldown { return }
+        lastRecoveryAttempt = Date()
+
+        Logger.musicKit.info("currentEntry missing for \(self.nilEntryStreak) heartbeats, cycling audio session")
+        keeper.cycleSession()
     }
 
     // MARK: - Observation

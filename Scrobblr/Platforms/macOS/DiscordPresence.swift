@@ -24,9 +24,10 @@ final class DiscordPresence {
 
     @ObservationIgnored private var rpc: SwiftRPC?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingUpdate: (info: GenericPlaybackInfo?, coverURL: URL?)?
     private var isConnected: Bool { status == .connected }
 
-    private static let reconnectInterval: Duration = .seconds(20)
+    private static let reconnectInterval: Duration = .seconds(3)
 
     func start() {
         guard rpc == nil else { return }
@@ -40,6 +41,9 @@ final class DiscordPresence {
             self?.status = .connected
             self?.reconnectTask?.cancel()
             self?.reconnectTask = nil
+            if let pending = self?.pendingUpdate {
+                self?.send(info: pending.info, coverURL: pending.coverURL)
+            }
         }
         client.onDisconnect { [weak self] _, _, _ in
             Logger.discord.info("Disconnected from Discord")
@@ -59,11 +63,18 @@ final class DiscordPresence {
         reconnectTask = nil
         rpc?.clearPresence()
         rpc = nil
+        pendingUpdate = nil
         status = .disabled
     }
 
     func update(for info: GenericPlaybackInfo?, coverURL: URL?) {
-        guard let rpc, isConnected else { return }
+        pendingUpdate = (info, coverURL)
+        guard isConnected else { return }
+        send(info: info, coverURL: coverURL)
+    }
+
+    private func send(info: GenericPlaybackInfo?, coverURL: URL?) {
+        guard let rpc else { return }
 
         guard let info, info.isPlaying else {
             rpc.clearPresence()

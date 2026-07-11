@@ -38,7 +38,6 @@ struct Ditto {
     }
 
     func generateCollage(
-    func generateCollage(
         theme: CollageTheme,
         entity: LastFMEntity,
         period: LastFMPeriod,

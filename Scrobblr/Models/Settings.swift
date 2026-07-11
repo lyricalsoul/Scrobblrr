@@ -30,18 +30,23 @@ final class Settings {
     /// Whether the menu shows the currently playing track
     var showNowPlayingInMenu: Bool
 
+    /// Whether the currently playing track is broadcast as a Discord Rich Presence (macOS only)
+    var discordPresenceEnabled: Bool = true
+
     init(
         scrobbleThreshold: Double = 0.5,
         maxScrobbleSeconds: Int = 240,
         minTrackSeconds: Int = 30,
         useArtistFix: Bool = true,
-        showNowPlayingInMenu: Bool = true
+        showNowPlayingInMenu: Bool = true,
+        discordPresenceEnabled: Bool = true
     ) {
         self.scrobbleThreshold = scrobbleThreshold
         self.maxScrobbleSeconds = maxScrobbleSeconds
         self.minTrackSeconds = minTrackSeconds
         self.useArtistFix = useArtistFix
         self.showNowPlayingInMenu = showNowPlayingInMenu
+        self.discordPresenceEnabled = discordPresenceEnabled
     }
 
     @MainActor

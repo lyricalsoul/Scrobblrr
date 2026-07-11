@@ -31,6 +31,7 @@ class ScrobblerManager {
     #if os(macOS)
     /// iOS doesnt need AI-based correction
     @ObservationIgnored let intelligence: AutoCorrector
+    @ObservationIgnored let discordPresence = DiscordPresence()
     #endif
 
     @ObservationIgnored let lastFM = LastFMScrobbler()
@@ -43,7 +44,6 @@ class ScrobblerManager {
     @ObservationIgnored private static let baseDelay: TimeInterval = 30          // first retry after 30s
     @ObservationIgnored private static let maxDelay: TimeInterval = 60 * 60      // cap at 1 hour
     @ObservationIgnored private static let maxAttempts = 12                      // then give up
-    @ObservationIgnored private static let idlePollInterval: TimeInterval = 60   // when queue is empty
     
     @ObservationIgnored private var currentTrackID: String?
     @ObservationIgnored private var wasPlaying = false
@@ -162,30 +162,38 @@ class ScrobblerManager {
         context.insert(item)
         try? context.save()
         Logger.queue.info("Enqueued scrobble for \(serviceName, privacy: .public), next attempt at \(next, privacy: .public)")
+        startRetryLoop()
     }
 
     private func startRetryLoop() {
+        guard retryTask == nil else { return }
+        let context = modelContainer.mainContext
+        let hasPending = ((try? context.fetchCount(FetchDescriptor<QueuedScrobble>())) ?? 0) > 0
+        guard hasPending else { return }
+
         retryTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                let sleep = await self.processQueueTick()
+                guard let sleep = await self.processQueueTick() else { break } // queue empty, stop
                 do {
                     try await Task.sleep(for: .seconds(sleep))
                 } catch {
                     return // cancelled
                 }
             }
+            self?.retryTask = nil
         }
     }
 
-    private func processQueueTick() async -> TimeInterval {
+  
+    private func processQueueTick() async -> TimeInterval? {
         let context = modelContainer.mainContext
         let descriptor = FetchDescriptor<QueuedScrobble>(
             sortBy: [SortDescriptor(\.nextAttempt)]
         )
 
         let items = (try? context.fetch(descriptor)) ?? []
-        guard !items.isEmpty else { return Self.idlePollInterval }
+        guard !items.isEmpty else { return nil }
 
         let now = Date()
         let due = items.filter { $0.nextAttempt <= now }
@@ -197,7 +205,7 @@ class ScrobblerManager {
         }
 
         let remaining = (try? context.fetch(descriptor)) ?? []
-        guard let soonest = remaining.first else { return Self.idlePollInterval }
+        guard let soonest = remaining.first else { return nil }
         return max(5, soonest.nextAttempt.timeIntervalSinceNow)
     }
 
@@ -296,30 +304,15 @@ class ScrobblerManager {
 
             let scrobble = await corrected(from: info)
 
-            let fetchedInfo: EpistolaresTrackInfo?
-            do {
-                fetchedInfo = try await epistolares.trackInfo(
-                    track: scrobble?.track ?? info.title,
-                    artist: scrobble?.artist ?? info.artist,
-                    album: scrobble?.album ?? info.album,
-                    username: lastFM.username
-                )
-            } catch {
-                Logger.epistolares.error("Couldn't fetch track info: \(error.localizedDescription, privacy: .public)")
-                fetchedInfo = nil
-            }
-
             // still playing the same thing after waiting?
             guard currentTrackID == info.id else { return }
 
             pendingScrobble = scrobble
-            currentInfo = fetchedInfo
-
-            coverImageUrl = fetchedInfo?.album?.cover?.url()
-                ?? fetchedInfo?.track.cover?.url()
-                ?? fetchedInfo?.artist.cover?.url()
-
+            currentInfo = nil
+            coverImageUrl = nil
             current = scrobble.map(info.withMetadata(from:)) ?? info
+
+            fetchTrackInfo(for: info, scrobble: scrobble)
 
             if info.isPlaying {
                 Logger.playback.info("New track playing: \(info.displayName, privacy: .public)")
@@ -340,6 +333,41 @@ class ScrobblerManager {
             scrobbleTask?.cancel()
             scrobbleTask = nil
         }
+
+        updateDiscordPresence(info)
+    }
+
+    private func updateDiscordPresence(_ info: GenericPlaybackInfo?) {
+        #if os(macOS)
+        guard settings.discordPresenceEnabled else {
+            discordPresence.stop()
+            return
+        }
+        discordPresence.start()
+        discordPresence.update(for: info, coverURL: coverImageUrl)
+        #endif
+    }
+
+    private func fetchTrackInfo(for info: GenericPlaybackInfo, scrobble: Scrobble?) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let fetchedInfo = try await self.epistolares.trackInfo(
+                    track: scrobble?.track ?? info.title,
+                    artist: scrobble?.artist ?? info.artist,
+                    album: scrobble?.album ?? info.album,
+                    username: self.lastFM.username
+                )
+                guard self.currentTrackID == info.id else { return }
+                self.currentInfo = fetchedInfo
+                self.coverImageUrl = fetchedInfo.album?.cover?.url()
+                    ?? fetchedInfo.track.cover?.url()
+                    ?? fetchedInfo.artist.cover?.url()
+                self.updateDiscordPresence(self.current)
+            } catch {
+                Logger.epistolares.error("Couldn't fetch track info: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Sends now playing request to last.fm
@@ -358,6 +386,7 @@ class ScrobblerManager {
         pendingScrobble = nil
         didScrobbleCurrent = false
         current = nil
+        updateDiscordPresence(nil)
     }
 
     /// Schedules the committed scrobble for the time remaining until the listen

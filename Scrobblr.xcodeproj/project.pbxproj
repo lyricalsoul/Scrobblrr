@@ -7,10 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		791AFE8C708AB65F5DB3EC54 /* SwiftRPC in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = CC592B3E16E22F17F2B669E9 /* SwiftRPC */; };
+		7BA7894F12B0AF9EDF25B86A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = B9016148299920E9BF761FEE /* Sparkle */; };
 		D523E9982FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D523E9972FF3507A00E41B9C /* Scrobblrr for iMessage MessagesExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D523E99B2FF3507A00E41B9C /* Messages.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D57D8BF92FF333D500CAB313 /* Messages.framework */; };
 		D561310E2FE4C5A9005C1B3B /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = D5962ABF2FE4BF9B00E4D3B4 /* MediaRemoteAdapter */; };
-		791AFE8C708AB65F5DB3EC54 /* SwiftRPC in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = CC592B3E16E22F17F2B669E9 /* SwiftRPC */; };
 		D561318E2FE4D405005C1B3B /* SlayZ.icon in Resources */ = {isa = PBXBuildFile; fileRef = D561318D2FE4D405005C1B3B /* SlayZ.icon */; };
 		D57D8BD62FF3117500CAB313 /* CachedAsyncImage in Frameworks */ = {isa = PBXBuildFile; productRef = D57D8BD52FF3117500CAB313 /* CachedAsyncImage */; };
 		D5962ABD2FE4BF7F00E4D3B4 /* LastFM in Frameworks */ = {isa = PBXBuildFile; productRef = D5962ABC2FE4BF7F00E4D3B4 /* LastFM */; };
@@ -121,6 +122,7 @@
 				D561310E2FE4C5A9005C1B3B /* MediaRemoteAdapter in Frameworks */,
 				D5962ABD2FE4BF7F00E4D3B4 /* LastFM in Frameworks */,
 				791AFE8C708AB65F5DB3EC54 /* SwiftRPC in Frameworks */,
+				7BA7894F12B0AF9EDF25B86A /* Sparkle in Frameworks */,
 			);
 		};
 		D523E9942FF3507A00E41B9C /* Frameworks */ = {
@@ -196,6 +198,7 @@
 				D5962ABF2FE4BF9B00E4D3B4 /* MediaRemoteAdapter */,
 				D57D8BD52FF3117500CAB313 /* CachedAsyncImage */,
 				CC592B3E16E22F17F2B669E9 /* SwiftRPC */,
+				B9016148299920E9BF761FEE /* Sparkle */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Scrobblr.app */;
@@ -274,6 +277,7 @@
 				D5962ABE2FE4BF9B00E4D3B4 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */,
 				D57D8BD42FF30A5F00CAB313 /* XCRemoteSwiftPackageReference "swiftui-cached-async-image" */,
 				48B0A2C1665C898029E3F0CE /* XCRemoteSwiftPackageReference "swiftrpc" */,
+				E4D3732E72044CF3297B8155 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -470,6 +474,7 @@
 				DEVELOPMENT_TEAM = 9BJLQFBQT9;
 				ENABLE_APP_SANDBOX = YES;
 				"ENABLE_APP_SANDBOX[sdk=macosx*]" = NO;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
@@ -529,6 +534,7 @@
 				DEVELOPMENT_TEAM = 9BJLQFBQT9;
 				ENABLE_APP_SANDBOX = YES;
 				"ENABLE_APP_SANDBOX[sdk=macosx*]" = NO;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
@@ -770,9 +776,22 @@
 				kind = branch;
 			};
 		};
+		E4D3732E72044CF3297B8155 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.4;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B9016148299920E9BF761FEE /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E4D3732E72044CF3297B8155 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		CC592B3E16E22F17F2B669E9 /* SwiftRPC */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 48B0A2C1665C898029E3F0CE /* XCRemoteSwiftPackageReference "swiftrpc" */;

@@ -6,6 +6,9 @@ import CachedAsyncImage
     @State private var manager: ScrobblerManager
     @State private var model: MediaModel
     @State private var webAuth = WebAuthCoordinator()
+    #if os(macOS)
+    @State private var updater = SparkleUpdater()
+    #endif
 
     private let modelContainer: ModelContainer
     private let settings: Settings
@@ -31,7 +34,7 @@ import CachedAsyncImage
     var body: some Scene {
         WindowGroup {
             #if os(macOS)
-            RootView(manager: manager, settings: settings)
+            RootView(manager: manager, settings: settings, updater: updater)
             #else
             RootView(manager: manager, settings: settings, model: model)
                 .task { await model.start() }
@@ -62,6 +65,11 @@ import CachedAsyncImage
                 Divider()
             }
             
+            Button("Check for Updates…") {
+                updater.checkForUpdates()
+            }
+            .disabled(!updater.canCheckForUpdates)
+
             SettingsLink {
                 Text("Settings…")
             }
@@ -71,7 +79,7 @@ import CachedAsyncImage
         }
 
         SwiftUI.Settings {
-            SettingsView(settings: settings, scrobbler: manager.lastFM)
+            SettingsView(settings: settings, scrobbler: manager.lastFM, updater: updater)
                 .modelContainer(modelContainer)
         }
         #endif
@@ -113,6 +121,17 @@ enum AppSection: String, CaseIterable, Identifiable {
         }
     }
 
+    #if os(macOS)
+    @MainActor @ViewBuilder
+    func destination(manager: ScrobblerManager, settings: Settings, updater: SparkleUpdater) -> some View {
+        switch self {
+        case .overview: OverviewView(manager: manager)
+        case .week:     WeekView(manager: manager)
+        case .collage:  CollageView(manager: manager)
+        case .settings: SettingsView(settings: settings, scrobbler: manager.lastFM, updater: updater)
+        }
+    }
+    #else
     @MainActor @ViewBuilder
     func destination(manager: ScrobblerManager, settings: Settings) -> some View {
         switch self {
@@ -122,6 +141,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .settings: SettingsView(settings: settings, scrobbler: manager.lastFM)
         }
     }
+    #endif
 }
 
 // MARK: - Root (adaptive)
@@ -131,6 +151,8 @@ struct RootView: View {
     let settings: Settings
     #if os(iOS)
     let model: MediaModel
+    #else
+    let updater: SparkleUpdater
     #endif
 
     @State private var webAuth = WebAuthCoordinator()
@@ -148,7 +170,7 @@ struct RootView: View {
         if !manager.lastFM.isAuthenticated {
             ConnectLastFMView(onSignIn: signIn)
         } else {
-            SidebarNavigation(manager: manager, settings: settings)
+            SidebarNavigation(manager: manager, settings: settings, updater: updater)
         }
         #endif
     }
@@ -181,6 +203,7 @@ struct RootView: View {
 struct SidebarNavigation: View {
     let manager: ScrobblerManager
     let settings: Settings
+    let updater: SparkleUpdater
 
     @State private var selection: AppSection? = .overview
 
@@ -197,7 +220,7 @@ struct SidebarNavigation: View {
             .scrollContentBackground(.hidden)
         } detail: {
             NavigationStack {
-                (selection ?? .overview).destination(manager: manager, settings: settings)
+                (selection ?? .overview).destination(manager: manager, settings: settings, updater: updater)
                     .infoRouteDestination(manager: manager)
                     .toolbarBackground(.hidden, for: .windowToolbar)
             }

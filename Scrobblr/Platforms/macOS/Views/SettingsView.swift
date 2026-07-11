@@ -13,10 +13,11 @@ import AppKit
 struct SettingsView: View {
     @Bindable var settings: Settings
     let scrobbler: LastFMScrobbler
+    let updater: SparkleUpdater
 
     var body: some View {
         TabView {
-            GeneralSettingsView(settings: settings)
+            GeneralSettingsView(settings: settings, updater: updater)
                 .tabItem { Label("General", systemImage: "gearshape") }
 
             ScrobblingSettingsView(settings: settings)
@@ -36,6 +37,7 @@ struct SettingsView: View {
 
 private struct GeneralSettingsView: View {
     @Bindable var settings: Settings
+    let updater: SparkleUpdater
     @State private var login = LoginItemController()
 
     var body: some View {
@@ -62,6 +64,17 @@ private struct GeneralSettingsView: View {
                 Toggle("Show Discord Rich Presence", isOn: $settings.discordPresenceEnabled)
             } footer: {
                 Text("Broadcasts what you're listening to on Discord. Requires the Discord app to be running.")
+            }
+
+            Section {
+                Toggle("Automatically check for updates", isOn: Binding(
+                    get: { updater.automaticallyChecksForUpdates },
+                    set: { updater.automaticallyChecksForUpdates = $0 }
+                ))
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
             }
         }
         .formStyle(.grouped)

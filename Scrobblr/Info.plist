@@ -17,6 +17,14 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>SUFeedURL</key>
+	<string>https://lyricalsoul.io/scrobblrr/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>07CUpjwhFYuSFRY1Kv5mvQcxMsQjZmLZ+WvolWcFl8s=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

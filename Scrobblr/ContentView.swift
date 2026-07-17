@@ -8,6 +8,7 @@ import CachedAsyncImage
     @State private var webAuth = WebAuthCoordinator()
     #if os(macOS)
     @State private var updater = SparkleUpdater()
+    @Environment(\.openWindow) private var openWindow
     #endif
 
     private let modelContainer: ModelContainer
@@ -32,7 +33,7 @@ import CachedAsyncImage
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             #if os(macOS)
             RootView(manager: manager, settings: settings, updater: updater)
             #else
@@ -40,12 +41,15 @@ import CachedAsyncImage
                 .task { await model.start() }
             #endif
         }
+        #if os(macOS)
+        .defaultLaunchBehavior(.suppressed)
+        #endif
         .modelContainer(modelContainer)
 
         #if os(macOS)
         MenuBarExtra(
             "Scroblrr",
-            systemImage: (manager.current != nil) ? "music.note" : "music.note.slash"
+            systemImage: (manager.displayInfo != nil) ? "music.note" : "music.note.slash"
         ) {
             let scrobbler = manager.lastFM
             if scrobbler.isAuthenticated {
@@ -58,13 +62,22 @@ import CachedAsyncImage
             Divider()
 
             if settings.showNowPlayingInMenu {
-                Text(manager.current?.displayName ?? "No playback detected")
+                if let device = manager.displayDeviceName {
+                    Text("\(manager.displayInfo?.displayName ?? "No playback detected") · \(device)")
+                } else {
+                    Text(manager.displayInfo?.displayName ?? "No playback detected")
+                }
                 if settings.discordPresenceEnabled {
                     discordStatusLabel
                 }
                 Divider()
             }
-            
+
+            Button("Open Scroblrr") {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
             Button("Check for Updates…") {
                 updater.checkForUpdates()
             }
@@ -167,11 +180,14 @@ struct RootView: View {
             TabNavigation(manager: manager, settings: settings)
         }
         #else
-        if !manager.lastFM.isAuthenticated {
-            ConnectLastFMView(onSignIn: signIn)
-        } else {
-            SidebarNavigation(manager: manager, settings: settings, updater: updater)
+        Group {
+            if !manager.lastFM.isAuthenticated {
+                ConnectLastFMView(onSignIn: signIn)
+            } else {
+                SidebarNavigation(manager: manager, settings: settings, updater: updater)
+            }
         }
+        .onAppear { NSApp.activate(ignoringOtherApps: true) }
         #endif
     }
 
@@ -225,7 +241,7 @@ struct SidebarNavigation: View {
                     .toolbarBackground(.hidden, for: .windowToolbar)
             }
         }
-        .background { AnimatedBackdrop(url: manager.coverImageUrl) }
+        .background { AnimatedBackdrop(url: manager.displayCoverURL) }
     }
 }
 #endif

@@ -25,7 +25,7 @@ final class DiscordPresence {
     @ObservationIgnored private var rpc: SwiftRPC?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var pendingUpdate: (info: GenericPlaybackInfo?, coverURL: URL?)?
-    private var isConnected: Bool { status == .connected }
+    @ObservationIgnored private var isConnected = false
 
     private static let reconnectInterval: Duration = .seconds(3)
 
@@ -39,6 +39,7 @@ final class DiscordPresence {
         client.onConnect { [weak self] _ in
             Logger.discord.info("Connected to Discord")
             self?.status = .connected
+            self?.isConnected = true
             self?.reconnectTask?.cancel()
             self?.reconnectTask = nil
             if let pending = self?.pendingUpdate {
@@ -48,6 +49,7 @@ final class DiscordPresence {
         client.onDisconnect { [weak self] _, _, _ in
             Logger.discord.info("Disconnected from Discord")
             self?.status = .connecting
+            self?.isConnected = false
             self?.scheduleReconnect()
         }
         client.onError { [weak self] _, code, msg in
@@ -64,6 +66,7 @@ final class DiscordPresence {
         rpc?.clearPresence()
         rpc = nil
         pendingUpdate = nil
+        isConnected = false
         status = .disabled
     }
 
@@ -95,10 +98,15 @@ final class DiscordPresence {
         }
 
         presence.assets.largeImage = coverURL?.absoluteString
-        presence.assets.largeText = info.album
+        presence.assets.largeText = info.album.map(Self.discordSafeText)
         presence.buttons = [.init(label: "Scrobblrr for macOS", url: "https://lyricalsoul.io/scrobblrr")]
 
         rpc.setPresence(presence, immediate: true)
+    }
+
+    private static func discordSafeText(_ text: String) -> String {
+        guard text.count <= 2 else { return text }
+        return text + " \u{200B} \u{00A0} \u{200B}"
     }
 
     private func attemptConnect() {

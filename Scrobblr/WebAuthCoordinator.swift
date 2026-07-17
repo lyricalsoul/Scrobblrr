@@ -20,6 +20,9 @@ final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentationContext
     static let callbackScheme = "scrobblr"
 
     func signIn(_ scrobbler: LastFMScrobbler) async {
+        #if os(macOS)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        #endif
         let url = scrobbler.authorizationURL(callbackScheme: Self.callbackScheme)
         guard let token = await authenticate(url: url, callbackScheme: Self.callbackScheme) else { return }
         try? await scrobbler.completeAuthentication(token: token)

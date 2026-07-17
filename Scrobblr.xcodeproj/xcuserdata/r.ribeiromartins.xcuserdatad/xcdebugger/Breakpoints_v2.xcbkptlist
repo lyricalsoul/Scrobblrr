@@ -15,9 +15,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "181"
-            endingLineNumber = "181"
-            landmarkName = "lookup(target:entity:)"
-            landmarkType = "7">
+            endingLineNumber = "181">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy

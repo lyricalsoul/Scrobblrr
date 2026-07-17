@@ -69,20 +69,31 @@ final class LastFMScrobbler: Scrobbable {
 
     private(set) var username: String?
 
+    /// The cross-device presence push key (see `Epistolares.registerPresence`)
+    private(set) var pushKey: String? {
+        didSet { Keychain.set(pushKey, for: Self.pushKeyKeychainAccount) }
+    }
+
     private var sessionKey: String? {
         didSet { Keychain.set(sessionKey, for: Self.sessionKeyKeychainAccount) }
     }
-    
+
     private var hasRecentlyLaunchedApp = true
 
     private static let sessionKeyKeychainAccount = "lastfm.sessionKey"
+    private static let pushKeyKeychainAccount = "lastfm.presencePushKey"
     private static let usernameDefaultsKey = "lastfm.username"
 
     var isAuthenticated: Bool { sessionKey != nil }
 
     init() {
         sessionKey = Keychain.get(Self.sessionKeyKeychainAccount)
+        pushKey = Keychain.get(Self.pushKeyKeychainAccount)
         username = UserDefaults.standard.string(forKey: Self.usernameDefaultsKey)
+
+        if sessionKey != nil, pushKey == nil {
+            registerPresenceIfNeeded()
+        }
     }
 
     // MARK: - Web authentication
@@ -102,13 +113,43 @@ final class LastFMScrobbler: Scrobbable {
         username = session.name
         UserDefaults.standard.set(session.name, forKey: Self.usernameDefaultsKey)
         Logger.auth.info("Signed in to Last.fm as \(session.name, privacy: .public)")
+        registerPresenceIfNeeded()
     }
 
     func signOut() {
         Logger.auth.info("Signing out of Last.fm")
         sessionKey = nil
         username = nil
+        pushKey = nil
         UserDefaults.standard.removeObject(forKey: Self.usernameDefaultsKey)
+    }
+
+    // MARK: - Cross-device presence
+
+    /// Exchanges the session key for a push key if we don't already have one
+    private func registerPresenceIfNeeded() {
+        guard let sessionKey else { return }
+        Task {
+            do {
+                let registration = try await epistolares.registerPresence(sessionKey: sessionKey)
+                pushKey = registration.pushKey
+                Logger.scrobbler.info("Registered cross-device presence for \(registration.username, privacy: .public)")
+            } catch {
+                Logger.scrobbler.error("Presence registration failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Pushes the current playback state for cross-device presence relay
+    func pushPresence(_ info: GenericPlaybackInfo?, device: String) {
+        guard let username, let pushKey else { return }
+        Task {
+            do {
+                try await epistolares.pushPresence(username: username, pushKey: pushKey, device: device, info: info)
+            } catch {
+                Logger.scrobbler.error("Presence push failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Scrobbable

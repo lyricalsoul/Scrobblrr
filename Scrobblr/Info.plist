@@ -17,6 +17,8 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSUIElement</key>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://lyricalsoul.io/scrobblrr/appcast.xml</string>
     <key>SUPublicEDKey</key>

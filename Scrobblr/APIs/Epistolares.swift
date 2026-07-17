@@ -128,6 +128,19 @@ struct EpistolaresRecentTracks: Decodable {
     }
 }
 
+// MARK: - Cross-device presence
+
+struct RemotePresence: Decodable {
+    let device: String
+    let info: GenericPlaybackInfo?
+    let updatedAt: Date
+}
+
+struct PresenceRegistration: Decodable {
+    let username: String
+    let pushKey: String
+}
+
 struct ChartPage: Decodable {
     let page: Int
     let totalPages: Int
@@ -168,6 +181,7 @@ enum EpistolaresError: LocalizedError {
     case badResponse
     case notFound
     case badRequest
+    case unauthorized
     case server(Int)
 
     var errorDescription: String? {
@@ -175,6 +189,7 @@ enum EpistolaresError: LocalizedError {
         case .badResponse:    "Epistolares returned an unexpected response"
         case .notFound:       "The requested entity wasn't found"
         case .badRequest:     "The request was missing or had invalid parameters"
+        case .unauthorized:   "The session key or push key was rejected"
         case .server(let s):  "Epistolares request failed (HTTP \(s))"
         }
     }
@@ -261,15 +276,43 @@ struct Epistolares {
         ])
     }
 
+    // MARK: - Cross-device presence
+
+    func registerPresence(sessionKey: String) async throws -> PresenceRegistration {
+        try await post("/user/presence/register", body: ["sessionKey": sessionKey])
+    }
+
+    func pushPresence(username: String, pushKey: String, device: String, info: GenericPlaybackInfo?) async throws {
+        struct Body: Encodable {
+            let device: String
+            let info: GenericPlaybackInfo?
+            let updatedAt: Date
+        }
+        try await post(
+            "/user/presence/\(username)",
+            body: Body(device: device, info: info, updatedAt: Date()),
+            headers: ["Authorization": "Bearer \(pushKey)"]
+        )
+    }
+
+    func presence(username: String, pushKey: String) async throws -> RemotePresence? {
+        do {
+            return try await get("/user/presence/\(username)", query: [], headers: ["Authorization": "Bearer \(pushKey)"])
+        } catch EpistolaresError.notFound {
+            return nil
+        }
+    }
+
     // MARK: - Request helpers
 
-    private func get<T: Decodable>(_ path: String, query: [URLQueryItem]) async throws -> T {
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem], headers: [String: String] = [:]) async throws -> T {
         var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         components.queryItems = query
 
         guard let url = components.url else { throw EpistolaresError.badResponse }
 
-        let request = URLRequest(url: url)
+        var request = URLRequest(url: url)
+        for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -279,10 +322,50 @@ struct Epistolares {
         switch http.statusCode {
         case 200..<300: break
         case 400:       throw EpistolaresError.badRequest
+        case 401:       throw EpistolaresError.unauthorized
         case 404:       throw EpistolaresError.notFound
         default:        throw EpistolaresError.server(http.statusCode)
         }
 
         return try decoder.decode(T.self, from: data)
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private func post<T: Decodable>(_ path: String, body: some Encodable, headers: [String: String] = [:]) async throws -> T {
+        let data = try await postRaw(path, body: body, headers: headers)
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func post(_ path: String, body: some Encodable, headers: [String: String] = [:]) async throws {
+        _ = try await postRaw(path, body: body, headers: headers)
+    }
+
+    @discardableResult
+    private func postRaw(_ path: String, body: some Encodable, headers: [String: String]) async throws -> Data {
+        var request = URLRequest(url: Self.baseURL.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
+        request.httpBody = try Self.encoder.encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw EpistolaresError.badResponse
+        }
+        switch http.statusCode {
+        case 200..<300: break
+        case 400:       throw EpistolaresError.badRequest
+        case 401:       throw EpistolaresError.unauthorized
+        case 404:       throw EpistolaresError.notFound
+        default:        throw EpistolaresError.server(http.statusCode)
+        }
+
+        return data
     }
 }

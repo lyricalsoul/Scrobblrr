@@ -30,6 +30,7 @@ struct SettingsView: View {
                 .tabItem { Label("Corrections", systemImage: "character.book.closed") }
         }
         .frame(width: 480)
+        .onAppear { NSApp.activate(ignoringOtherApps: true) }
     }
 }
 
@@ -62,8 +63,9 @@ private struct GeneralSettingsView: View {
 
             Section {
                 Toggle("Show Discord Rich Presence", isOn: $settings.discordPresenceEnabled)
+                Toggle("Show what's playing on other devices", isOn: $settings.receiveCrossDevicePresenceEnabled)
             } footer: {
-                Text("Broadcasts what you're listening to on Discord. Requires the Discord app to be running.")
+                Text("Broadcasts what you're listening to on Discord. Requires the Discord app to be running. When nothing is playing on this computer, falls back to what's playing on your phone (if cross-presence is enabled).")
             }
 
             Section {

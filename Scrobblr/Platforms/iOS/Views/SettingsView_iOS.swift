@@ -18,9 +18,24 @@ struct SettingsView: View {
             ScrobblingSection(settings: settings)
             CorrectionSection()
             AccountSection(scrobbler: scrobbler)
+            PresenceSection(settings: settings)
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Presence
+
+private struct PresenceSection: View {
+    @Bindable var settings: Settings
+
+    var body: some View {
+        Section {
+            Toggle("Share now playing across devices", isOn: $settings.crossDevicePresenceEnabled)
+        } footer: {
+            Text("Lets a Mac with Scrobblrr and Discord open show what you're listening to here. Your data is protected and only your last.fm account can access it.")
+        }
     }
 }
 

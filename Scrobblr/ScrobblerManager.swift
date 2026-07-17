@@ -21,17 +21,61 @@ class ScrobblerManager {
 
     private(set) var currentInfo: EpistolaresTrackInfo?
 
+    #if os(macOS)
+    private(set) var relayInfo: GenericPlaybackInfo?
+    private(set) var relayDevice: String?
+    private(set) var relayUpdatedAt: Date?
+    private(set) var relayTrackInfo: EpistolaresTrackInfo?
+    @ObservationIgnored private var relayTrackInfoID: String?
 
-    var currentTrackScrobbles: Int? { currentInfo?.track.userScrobbles?.playCount }
-    var currentAlbumScrobbles: Int? { currentInfo?.album?.userScrobbles?.playCount }
-    var currentArtistScrobbles: Int? { currentInfo?.artist.userScrobbles?.playCount }
-    var currentArtistCoverURL: URL? { currentInfo?.artist.cover?.url() }
-    var albumOnlyCoverURL: URL? { currentInfo?.album?.cover?.url() ?? currentInfo?.track.cover?.url() }
+    private var driftCorrectedRelayInfo: GenericPlaybackInfo? {
+        guard let relayInfo, let relayUpdatedAt else { return relayInfo }
+        return relayInfo.adjustedForRelayDrift(since: relayUpdatedAt)
+    }
+
+    var isLocalIdle: Bool { current?.isPlaying != true }
+
+    var displayInfo: GenericPlaybackInfo? {
+        guard isLocalIdle else { return current }
+        guard settings.receiveCrossDevicePresenceEnabled else { return nil }
+        return relayInfo
+    }
+
+    var displayCoverURL: URL? {
+        guard isLocalIdle else { return coverImageUrl }
+        guard settings.receiveCrossDevicePresenceEnabled else { return nil }
+        return relayInfo?.coverURL
+    }
+
+    var isDisplayingFromRelay: Bool {
+        isLocalIdle && relayInfo != nil && settings.receiveCrossDevicePresenceEnabled
+    }
+
+    var displayDeviceName: String? {
+        guard isDisplayingFromRelay, let relayDevice else { return nil }
+        switch relayDevice.lowercased() {
+        case "ios": return "iPhone"
+        case "mac", "macos": return "Mac"
+        default: return relayDevice.capitalized
+        }
+    }
+
+    var displayTrackInfo: EpistolaresTrackInfo? { isLocalIdle ? relayTrackInfo : currentInfo }
+    #else
+    var displayTrackInfo: EpistolaresTrackInfo? { currentInfo }
+    #endif
+
+    var currentTrackScrobbles: Int? { displayTrackInfo?.track.userScrobbles?.playCount }
+    var currentAlbumScrobbles: Int? { displayTrackInfo?.album?.userScrobbles?.playCount }
+    var currentArtistScrobbles: Int? { displayTrackInfo?.artist.userScrobbles?.playCount }
+    var currentArtistCoverURL: URL? { displayTrackInfo?.artist.cover?.url() }
+    var albumOnlyCoverURL: URL? { displayTrackInfo?.album?.cover?.url() ?? displayTrackInfo?.track.cover?.url() }
 
     #if os(macOS)
     /// iOS doesnt need AI-based correction
     @ObservationIgnored let intelligence: AutoCorrector
     @ObservationIgnored let discordPresence = DiscordPresence()
+    @ObservationIgnored let remotePresence = RemotePresenceClient()
     #endif
 
     @ObservationIgnored let lastFM = LastFMScrobbler()
@@ -40,6 +84,7 @@ class ScrobblerManager {
 
     @ObservationIgnored private let modelContainer: ModelContainer
     @ObservationIgnored private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private var retryGeneration = 0
 
     @ObservationIgnored private static let baseDelay: TimeInterval = 30          // first retry after 30s
     @ObservationIgnored private static let maxDelay: TimeInterval = 60 * 60      // cap at 1 hour
@@ -61,6 +106,14 @@ class ScrobblerManager {
         self.modelContainer = modelContainer
         #if os(macOS)
         self.intelligence = AutoCorrector(modelContainer: modelContainer)
+        remotePresence.onUpdate = { [weak self] in
+            guard let self else { return }
+            self.relayInfo = self.remotePresence.latest
+            self.relayDevice = self.remotePresence.latestDevice
+            self.relayUpdatedAt = self.remotePresence.latestUpdatedAt
+            self.fetchRelayTrackInfo()
+            self.updateDiscordPresence()
+        }
         #endif
         startRetryLoop()
     }
@@ -162,6 +215,9 @@ class ScrobblerManager {
         context.insert(item)
         try? context.save()
         Logger.queue.info("Enqueued scrobble for \(serviceName, privacy: .public), next attempt at \(next, privacy: .public)")
+
+        retryTask?.cancel()
+        retryTask = nil
         startRetryLoop()
     }
 
@@ -171,6 +227,9 @@ class ScrobblerManager {
         let hasPending = ((try? context.fetchCount(FetchDescriptor<QueuedScrobble>())) ?? 0) > 0
         guard hasPending else { return }
 
+        retryGeneration += 1
+        let generation = retryGeneration
+
         retryTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -178,10 +237,12 @@ class ScrobblerManager {
                 do {
                     try await Task.sleep(for: .seconds(sleep))
                 } catch {
-                    return // cancelled
+                    break // cancelled - a fresher task has already taken over
                 }
             }
-            self?.retryTask = nil
+            
+            guard let self, self.retryGeneration == generation else { return }
+            self.retryTask = nil
         }
     }
 
@@ -322,11 +383,14 @@ class ScrobblerManager {
             }
         } else if info.isPlaying {
             // Resumed
-            guard !didScrobbleCurrent, pendingScrobble != nil else { return }
-            Logger.playback.info("Resumed \(info.displayName, privacy: .public)")
-            await announceAndSchedule(for: info)
+            current = current?.withPlaying(true)
+            if !didScrobbleCurrent, pendingScrobble != nil {
+                Logger.playback.info("Resumed \(info.displayName, privacy: .public)")
+                await announceAndSchedule(for: info)
+            }
         } else {
             // Paused
+            current = current?.withPlaying(false)
             if scrobbleTask != nil {
                 Logger.playback.info("Paused: cancelling scrobble countdown for \(info.displayName, privacy: .public)")
             }
@@ -334,19 +398,121 @@ class ScrobblerManager {
             scrobbleTask = nil
         }
 
-        updateDiscordPresence(info)
+        broadcastPresence()
     }
 
-    private func updateDiscordPresence(_ info: GenericPlaybackInfo?) {
+    // MARK: - Presence broadcasting
+
+    private struct BroadcastKey: Equatable {
+        let title: String
+        let artist: String
+        let album: String?
+        let isPlaying: Bool
+        let coverURL: URL?
+    }
+
+    #if os(macOS)
+    @ObservationIgnored private var lastDiscordBroadcast: BroadcastKey?
+    #endif
+    #if os(iOS)
+    @ObservationIgnored private var lastPushedBroadcast: BroadcastKey?
+    #endif
+
+    private var readyToBroadcast: GenericPlaybackInfo? {
+        guard let current, current.isPlaying, let coverImageUrl else { return nil }
+        return current.withCoverURL(coverImageUrl)
+    }
+
+    private func broadcastKey(for info: GenericPlaybackInfo?) -> BroadcastKey? {
+        info.map {
+            BroadcastKey(title: $0.title, artist: $0.artist, album: $0.album, isPlaying: $0.isPlaying, coverURL: $0.coverURL)
+        }
+    }
+
+    private func broadcastPresence() {
         #if os(macOS)
+        updateDiscordPresence()
+        #endif
+        #if os(iOS)
+        pushRemotePresence()
+        #endif
+    }
+
+    #if os(macOS)
+    private func updateDiscordPresence() {
         guard settings.discordPresenceEnabled else {
             discordPresence.stop()
+            remotePresence.stop()
+            relayInfo = nil
+            relayDevice = nil
+            relayUpdatedAt = nil
+            relayTrackInfo = nil
+            relayTrackInfoID = nil
+            lastDiscordBroadcast = nil
             return
         }
         discordPresence.start()
-        discordPresence.update(for: info, coverURL: coverImageUrl)
-        #endif
+
+        if settings.receiveCrossDevicePresenceEnabled, let username = lastFM.username, let pushKey = lastFM.pushKey {
+            remotePresence.start(username: username, pushKey: pushKey)
+        } else {
+            remotePresence.stop()
+            relayInfo = nil
+            relayDevice = nil
+            relayUpdatedAt = nil
+            relayTrackInfo = nil
+            relayTrackInfoID = nil
+        }
+
+        let effectiveInfo = readyToBroadcast ?? (isLocalIdle ? driftCorrectedRelayInfo : nil)
+
+        let key = broadcastKey(for: effectiveInfo)
+        guard key != lastDiscordBroadcast else { return }
+        lastDiscordBroadcast = key
+
+        discordPresence.update(for: effectiveInfo, coverURL: effectiveInfo?.coverURL)
     }
+    #endif
+
+    #if os(iOS)
+    private func pushRemotePresence() {
+        guard settings.crossDevicePresenceEnabled else { return }
+
+        if current?.isPlaying == true, coverImageUrl == nil { return }
+
+        let key = broadcastKey(for: readyToBroadcast)
+        guard key != lastPushedBroadcast else { return }
+        lastPushedBroadcast = key
+
+        lastFM.pushPresence(readyToBroadcast, device: "ios")
+    }
+    #endif
+
+    #if os(macOS)
+    private func fetchRelayTrackInfo() {
+        guard let info = relayInfo else {
+            relayTrackInfo = nil
+            relayTrackInfoID = nil
+            return
+        }
+        guard relayTrackInfoID != info.id else { return }
+        relayTrackInfoID = info.id
+        relayTrackInfo = nil
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let fetchedInfo = try await self.epistolares.trackInfo(
+                    track: info.title, artist: info.artist, album: info.album, username: self.lastFM.username
+                )
+                guard self.relayTrackInfoID == info.id else { return }
+                self.relayTrackInfo = fetchedInfo
+            } catch {
+                Logger.epistolares.error("Couldn't fetch relay track info: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    #endif
 
     private func fetchTrackInfo(for info: GenericPlaybackInfo, scrobble: Scrobble?) {
         Task { [weak self] in
@@ -363,7 +529,7 @@ class ScrobblerManager {
                 self.coverImageUrl = fetchedInfo.album?.cover?.url()
                     ?? fetchedInfo.track.cover?.url()
                     ?? fetchedInfo.artist.cover?.url()
-                self.updateDiscordPresence(self.current)
+                self.broadcastPresence()
             } catch {
                 Logger.epistolares.error("Couldn't fetch track info: \(error.localizedDescription, privacy: .public)")
             }
@@ -386,7 +552,9 @@ class ScrobblerManager {
         pendingScrobble = nil
         didScrobbleCurrent = false
         current = nil
-        updateDiscordPresence(nil)
+        currentInfo = nil
+        coverImageUrl = nil
+        broadcastPresence()
     }
 
     /// Schedules the committed scrobble for the time remaining until the listen

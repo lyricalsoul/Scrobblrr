@@ -41,7 +41,7 @@ struct CollageView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Collage")
         .toolbar { generateButton }
-        .background { AnimatedBackdrop(url: manager.coverImageUrl) }
+        .background { AnimatedBackdrop(url: manager.displayCoverURL) }
         #else
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {

@@ -29,17 +29,17 @@ final class MediaModel {
         
         mediaController.onTrackInfoReceived = { [weak self] trackInfo in
             guard let self else { return }
-            guard let payload = trackInfo?.payload else {
+            guard let payload = trackInfo?.payload, let title = payload.title, let artist = payload.artist else {
                 self.clear()
                 return
             }
 
             let info = GenericPlaybackInfo(
-                title: payload.title!,
-                artist: payload.artist!,
+                title: title,
+                artist: artist,
                 album: payload.album,
-                durationSeconds: Int(payload.durationMicros! / 1000000),
-                elapsedTimeSeconds: Int(payload.elapsedTimeMicros! / 1000000),
+                durationSeconds: Int((payload.durationMicros ?? 0) / 1_000_000),
+                elapsedTimeSeconds: Int((payload.elapsedTimeMicros ?? 0) / 1_000_000),
                 isPlaying: payload.isPlaying ?? false
             )
             self.manager.update(info)

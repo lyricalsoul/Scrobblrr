@@ -35,4 +35,6 @@ extension Logger {
     static let musicKit = Logger(subsystem: subsystem, category: "musickit")
     /// Discord Rich Presence
     static let discord = Logger(subsystem: subsystem, category: "discord")
+    /// Cross-device presence relay
+    static let presence = Logger(subsystem: subsystem, category: "presence")
 }

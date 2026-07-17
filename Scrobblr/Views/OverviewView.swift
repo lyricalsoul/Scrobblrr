@@ -15,7 +15,7 @@ struct OverviewView: View {
     var body: some View {
         #if os(macOS)
         GeometryReader { geo in
-            if let track = manager.current {
+            if let track = manager.displayInfo {
                 macCard(for: track, in: geo.size)
             } else {
                 emptyState
@@ -62,7 +62,14 @@ struct OverviewView: View {
                 .shadow(radius: 18, y: 10)
 
             VStack(alignment: .leading, spacing: 16) {
-                header(for: track)
+                VStack(alignment: .leading, spacing: 6) {
+                    if let device = manager.displayDeviceName {
+                        Label("Playing on \(device)", systemImage: "iphone")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    header(for: track)
+                }
                 Spacer(minLength: 16)
                 statsCard(for: track)
             }
@@ -116,7 +123,7 @@ struct OverviewView: View {
                 title: track.title,
                 count: manager.currentTrackScrobbles
             )
-            if let trackID = manager.currentInfo?.track.id {
+            if let trackID = manager.displayTrackInfo?.track.id {
                 NavigationLink(value: InfoRoute.track(id: trackID, name: track.title)) {
                     trackRow
                 }
@@ -132,7 +139,7 @@ struct OverviewView: View {
                     title: album,
                     count: manager.currentAlbumScrobbles
                 )
-                if let albumID = manager.currentInfo?.album?.id {
+                if let albumID = manager.displayTrackInfo?.album?.id {
                     NavigationLink(value: InfoRoute.album(id: albumID, name: album)) {
                         albumRow
                     }
@@ -148,7 +155,7 @@ struct OverviewView: View {
                 title: track.artist,
                 count: manager.currentArtistScrobbles
             )
-            if let artistID = manager.currentInfo?.artist.id {
+            if let artistID = manager.displayTrackInfo?.artist.id {
                 NavigationLink(value: InfoRoute.artist(id: artistID, name: track.artist)) {
                     artistRow
                 }
@@ -166,9 +173,17 @@ struct OverviewView: View {
 
     // MARK: - Pieces
 
+    private var resolvedCoverURL: URL? {
+        #if os(macOS)
+        manager.displayCoverURL
+        #else
+        manager.coverImageUrl
+        #endif
+    }
+
     /// The raw, unsized cover image; callers apply the frame/clip they need
     private var albumArtImage: some View {
-        CachedAsyncImage(url: manager.coverImageUrl) { image in
+        CachedAsyncImage(url: resolvedCoverURL) { image in
             image
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -181,9 +196,9 @@ struct OverviewView: View {
                         .foregroundStyle(.secondary)
                 )
         }
-        .id(manager.coverImageUrl)
+        .id(resolvedCoverURL)
         .transition(.opacity)
-        .animation(.easeInOut(duration: 0.4), value: manager.coverImageUrl)
+        .animation(.easeInOut(duration: 0.4), value: resolvedCoverURL)
     }
 
     private func coverThumb(size: CGFloat) -> some View {

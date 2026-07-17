@@ -33,13 +33,21 @@ final class Settings {
     /// Whether the currently playing track is broadcast as a Discord Rich Presence (macOS only)
     var discordPresenceEnabled: Bool = true
 
+    /// Whether this device pushes its now-playing state for cross-device presence relay.
+    var crossDevicePresenceEnabled: Bool = true
+
+    /// Whether this Mac shows another device's relayed now-playing state on Discord.
+    var receiveCrossDevicePresenceEnabled: Bool = true
+
     init(
         scrobbleThreshold: Double = 0.5,
         maxScrobbleSeconds: Int = 240,
         minTrackSeconds: Int = 30,
         useArtistFix: Bool = true,
         showNowPlayingInMenu: Bool = true,
-        discordPresenceEnabled: Bool = true
+        discordPresenceEnabled: Bool = true,
+        crossDevicePresenceEnabled: Bool = true,
+        receiveCrossDevicePresenceEnabled: Bool = true
     ) {
         self.scrobbleThreshold = scrobbleThreshold
         self.maxScrobbleSeconds = maxScrobbleSeconds
@@ -47,6 +55,8 @@ final class Settings {
         self.useArtistFix = useArtistFix
         self.showNowPlayingInMenu = showNowPlayingInMenu
         self.discordPresenceEnabled = discordPresenceEnabled
+        self.crossDevicePresenceEnabled = crossDevicePresenceEnabled
+        self.receiveCrossDevicePresenceEnabled = receiveCrossDevicePresenceEnabled
     }
 
     @MainActor

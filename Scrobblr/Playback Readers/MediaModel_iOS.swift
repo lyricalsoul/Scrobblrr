@@ -36,7 +36,10 @@ final class MediaModel {
     @ObservationIgnored private var lastRecoveryAttempt: Date?
     private static let staleEntryThreshold = 5
     private static let recoveryCooldown: TimeInterval = 120
-    
+
+    @ObservationIgnored private var isBackgrounded = false
+    @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
+
     private let manager: ScrobblerManager
 
     init(manager: ScrobblerManager, settings: Settings) {
@@ -45,6 +48,7 @@ final class MediaModel {
 
     deinit {
         heartbeatTask?.cancel()
+        lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     /// Requests MusicKit access, starts the background audio keeper, and begins
@@ -57,11 +61,31 @@ final class MediaModel {
         }
 
         Task {
-            keeper.start()
+            observeAppLifecycle()
             observe()
             await startHeartbeat()
             await publishCurrent()
         }
+    }
+
+    private func observeAppLifecycle() {
+        let center = NotificationCenter.default
+        lifecycleObservers.append(center.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isBackgrounded = true
+                self?.keeper.start()
+            }
+        })
+        lifecycleObservers.append(center.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isBackgrounded = false
+                self?.keeper.stop()
+            }
+        })
     }
 
     // MARK: - Heartbeat
@@ -73,10 +97,10 @@ final class MediaModel {
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.heartbeatInterval)
                 guard !Task.isCancelled, let self else { return }
-                // Pick up a revocation that happened while we were running so the
-                // UI can switch to the access gate cleanly instead of going stale.
                 self.authorizationStatus = MusicAuthorization.currentStatus
-                self.keeper.ensurePlaying()
+                if self.isBackgrounded {
+                    self.keeper.ensurePlaying()
+                }
                 let entry = SystemMusicPlayer.shared.queue.currentEntry
                 Logger.musicKit.debug("Heartbeat tick: currentEntry=\(entry?.id ?? "nil", privacy: .public) status=\(String(describing: SystemMusicPlayer.shared.state.playbackStatus), privacy: .public)")
                 self.trackStaleness(entry: entry)
@@ -93,6 +117,8 @@ final class MediaModel {
 
         nilEntryStreak += 1
         guard nilEntryStreak >= Self.staleEntryThreshold else { return }
+
+        guard isBackgrounded else { return }
 
         if let last = lastRecoveryAttempt, Date().timeIntervalSince(last) < Self.recoveryCooldown { return }
         lastRecoveryAttempt = Date()

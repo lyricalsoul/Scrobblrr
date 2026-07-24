@@ -11,6 +11,7 @@ import CachedAsyncImage
 struct AnimatedBackdrop: View {
     let url: URL?
 
+    @Environment(\.scenePhase) private var scenePhase
     @State private var breathe = false
     @State private var hueShift = false
 
@@ -25,13 +26,23 @@ struct AnimatedBackdrop: View {
         .saturation(1.6)
         .hueRotation(.degrees(hueShift ? 14 : -14))
         .ignoresSafeArea()
-        .onAppear {
-            withAnimation(.easeInOut(duration: 18).repeatForever(autoreverses: true)) {
-                breathe = true
+        .onAppear { updateAnimation(active: scenePhase == .active) }
+        .onChange(of: scenePhase) { _, newPhase in updateAnimation(active: newPhase == .active) }
+    }
+
+    private func updateAnimation(active: Bool) {
+        guard active else {
+            withAnimation(.none) {
+                breathe = false
+                hueShift = false
             }
-            withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
-                hueShift = true
-            }
+            return
+        }
+        withAnimation(.easeInOut(duration: 18).repeatForever(autoreverses: true)) {
+            breathe = true
+        }
+        withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
+            hueShift = true
         }
     }
 

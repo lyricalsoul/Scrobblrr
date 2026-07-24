@@ -37,24 +37,30 @@ final class DiscordPresence {
         rpc = client
 
         client.onConnect { [weak self] _ in
-            Logger.discord.info("Connected to Discord")
-            self?.status = .connected
-            self?.isConnected = true
-            self?.reconnectTask?.cancel()
-            self?.reconnectTask = nil
-            if let pending = self?.pendingUpdate {
-                self?.send(info: pending.info, coverURL: pending.coverURL)
+            Task { @MainActor [weak self] in
+                Logger.discord.info("Connected to Discord")
+                self?.status = .connected
+                self?.isConnected = true
+                self?.reconnectTask?.cancel()
+                self?.reconnectTask = nil
+                if let pending = self?.pendingUpdate {
+                    self?.send(info: pending.info, coverURL: pending.coverURL)
+                }
             }
         }
         client.onDisconnect { [weak self] _, _, _ in
-            Logger.discord.info("Disconnected from Discord")
-            self?.status = .connecting
-            self?.isConnected = false
-            self?.scheduleReconnect()
+            Task { @MainActor [weak self] in
+                Logger.discord.info("Disconnected from Discord")
+                self?.status = .connecting
+                self?.isConnected = false
+                self?.scheduleReconnect()
+            }
         }
         client.onError { [weak self] _, code, msg in
-            Logger.discord.error("Discord RPC error \(code, privacy: .public): \(msg, privacy: .public)")
-            self?.status = .error(msg)
+            Task { @MainActor [weak self] in
+                Logger.discord.error("Discord RPC error \(code, privacy: .public): \(msg, privacy: .public)")
+                self?.status = .error(msg)
+            }
         }
 
         attemptConnect()

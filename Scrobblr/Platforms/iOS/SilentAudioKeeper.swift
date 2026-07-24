@@ -45,6 +45,13 @@ final class SilentAudioKeeper {
         configureAndPlay()
     }
 
+    func stop() {
+        guard player != nil else { return }
+        player?.stop()
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
     func cycleSession() {
         Logger.playback.info("Attempting MusicKit reconnect")
         player?.stop()

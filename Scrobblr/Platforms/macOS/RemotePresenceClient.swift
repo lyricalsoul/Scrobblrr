@@ -7,46 +7,61 @@
 
 #if os(macOS)
 import Foundation
+import AppKit
 import os
 
 @MainActor
 @Observable
 final class RemotePresenceClient {
-    enum Status: Equatable {
-        case disabled
-        case connecting
-        case connected
-        case error(String)
-    }
-
-    private(set) var status: Status = .disabled
+    private(set) var status: ConnectionStatus = .disabled
     private(set) var latest: GenericPlaybackInfo?
-    /// The device string from the last push (e.g. "ios"), for attributing `latest` in the UI
+    /// device string from the last push, e.g. "ios"
     private(set) var latestDevice: String?
-    /// When `latest` was recorded server-side
     private(set) var latestUpdatedAt: Date?
 
-    /// Fired whenever `latest` changes from a WS push or the initial GET
+    /// fired when `latest` changes from a push or the initial fetch
     var onUpdate: (() -> Void)?
 
     @ObservationIgnored private var task: URLSessionWebSocketTask?
-    @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var receiveTask: Task<Void, Never>?
-    @ObservationIgnored private var username: String?
-    @ObservationIgnored private var pushKey: String?
-    @ObservationIgnored private let epistolares = Epistolares()
+    @ObservationIgnored var username: String?
+    @ObservationIgnored var pushKey: String?
+    @ObservationIgnored var openSocket: (URLRequest) -> URLSessionWebSocketTask? = {
+        let task = URLSession.shared.webSocketTask(with: $0)
+        task.resume()
+        return task
+    }
+    @ObservationIgnored var fetchPresence: (String, String) async throws -> RemotePresence? = { try await Epistolares().presence(username: $0, pushKey: $1) }
+    @ObservationIgnored private var wakeObserver: NSObjectProtocol?
 
-    private static let reconnectInterval: Duration = .seconds(3)
+    @ObservationIgnored private(set) var backoff = Backoff()
+    @ObservationIgnored private var keyRejected = false
 
     func start(username: String, pushKey: String) {
-        guard task == nil else {
-            guard self.username != username || self.pushKey != pushKey else { return }
+        if wakeObserver == nil {
+            // sleep can leave the socket dead without erroring, so reconnect on wake
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    Logger.presence.info("Mac woke from sleep, forcing presence WS reconnect")
+                    self?.forceReconnect()
+                }
+            }
+        }
+
+        // called on every broadcast, so same credentials must not retry a rejected key or reset the backoff
+        let changed = username != self.username || pushKey != self.pushKey
+        guard changed || !keyRejected else { return }
+        if changed {
+            keyRejected = false
+            backoff.reset()
+        }
+        if task != nil || reconnectTask != nil {
+            guard changed else { return }
             Logger.presence.info("Presence credentials changed, reconnecting")
-            stop()
-            self.username = username
-            self.pushKey = pushKey
-            connect()
-            return
+            stop(keepingWakeObserver: true)
         }
         self.username = username
         self.pushKey = pushKey
@@ -54,18 +69,37 @@ final class RemotePresenceClient {
     }
 
     func stop() {
-        guard task != nil || reconnectTask != nil else { return }
+        stop(keepingWakeObserver: false)
+    }
+
+    private func stop(keepingWakeObserver: Bool) {
+        if !keepingWakeObserver, let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
+        guard task != nil || reconnectTask != nil || keyRejected else { return }
         Logger.presence.info("Stopping presence WS")
-        reconnectTask?.cancel(); reconnectTask = nil
-        receiveTask?.cancel(); receiveTask = nil
-        task?.cancel(with: .goingAway, reason: nil)
-        task = nil
+        disconnect(.goingAway)
+        keyRejected = false
         status = .disabled
         latest = nil
         latestDevice = nil
         latestUpdatedAt = nil
         username = nil
         pushKey = nil
+    }
+
+    private func forceReconnect() {
+        guard username != nil, pushKey != nil, !keyRejected else { return }
+        disconnect(.goingAway)
+        connect()
+    }
+
+    private func disconnect(_ code: URLSessionWebSocketTask.CloseCode) {
+        reconnectTask?.cancel(); reconnectTask = nil
+        receiveTask?.cancel(); receiveTask = nil
+        task?.cancel(with: code, reason: nil)
+        task = nil
     }
 
     private func connect() {
@@ -80,27 +114,30 @@ final class RemotePresenceClient {
         var request = URLRequest(url: components.url!)
         request.setValue("Bearer \(pushKey)", forHTTPHeaderField: "Authorization")
 
-        let wsTask = URLSession.shared.webSocketTask(with: request)
-        task = wsTask
-        wsTask.resume()
+        task = openSocket(request)
 
         fetchInitialState(username: username, pushKey: pushKey)
         receiveLoop()
     }
 
-    /// So the Mac has current state immediately instead of waiting for the next push...
+    // gets current state without waiting for the next push
     private func fetchInitialState(username: String, pushKey: String) {
         Task { [weak self] in
             guard let self else { return }
-            do {
-                guard let presence = try await self.epistolares.presence(username: username, pushKey: pushKey) else {
-                    Logger.presence.info("No presence on record yet for \(username, privacy: .public)")
-                    return
-                }
-                self.apply(presence)
-            } catch {
-                Logger.presence.error("Initial presence fetch failed: \(error.localizedDescription, privacy: .public)")
-            }
+            let result: Result<RemotePresence?, Error>
+            do { result = .success(try await self.fetchPresence(username, pushKey)) } catch { result = .failure(error) }
+            self.initialFetched(result, username: username, pushKey: pushKey)
+        }
+    }
+
+    func initialFetched(_ result: Result<RemotePresence?, Error>, username: String, pushKey: String) {
+        guard username == self.username, pushKey == self.pushKey else { return }
+        switch result {
+        case .success(let presence):
+            if let presence { apply(presence) } else { Logger.presence.info("No presence on record yet for \(username, privacy: .public)") }
+        case .failure(let error):
+            if case EpistolaresError.unauthorized = error { connectionFailed(statusCode: 401, message: error.localizedDescription) }
+            Logger.presence.error("Initial presence fetch failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -120,25 +157,35 @@ final class RemotePresenceClient {
                 self.receiveLoop()
             } catch {
                 guard !Task.isCancelled else { return }
-                Logger.presence.error("WS receive failed: \(error.localizedDescription, privacy: .public)")
-                self.status = .error(error.localizedDescription)
-                self.scheduleReconnect()
+                self.connectionFailed(statusCode: (task.response as? HTTPURLResponse)?.statusCode, message: error.localizedDescription)
             }
         }
     }
 
-    private func handle(_ message: URLSessionWebSocketTask.Message) {
+    func connectionFailed(statusCode: Int?, message: String) {
+        Logger.presence.error("WS receive failed (\(statusCode ?? 0, privacy: .public)): \(message, privacy: .public)")
+        guard statusCode == 401 else {
+            status = .error(message)
+            scheduleReconnect()
+            return
+        }
+        keyRejected = true
+        disconnect(.policyViolation)
+        status = .error("Presence key rejected")
+    }
+
+    func handle(_ message: URLSessionWebSocketTask.Message) {
+        backoff.reset()
         guard case .string(let text) = message, let data = text.data(using: .utf8) else { return }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            apply(try decoder.decode(RemotePresence.self, from: data))
+            apply(try Epistolares.decoder.decode(RemotePresence.self, from: data))
         } catch {
             Logger.presence.error("Couldn't decode presence message: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    private func apply(_ presence: RemotePresence) {
+    func apply(_ presence: RemotePresence) {
+        if let latestUpdatedAt, presence.updatedAt < latestUpdatedAt { return }
         latest = presence.info
         latestDevice = presence.device
         latestUpdatedAt = presence.updatedAt
@@ -150,9 +197,10 @@ final class RemotePresenceClient {
         task?.cancel(with: .abnormalClosure, reason: nil)
         task = nil
         guard reconnectTask == nil else { return }
-        Logger.presence.info("Reconnecting to presence WS in \(Int(Self.reconnectInterval.components.seconds))s")
+        let delay = backoff.next()
+        Logger.presence.info("Reconnecting to presence WS in \(Int(delay.components.seconds))s")
         reconnectTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.reconnectInterval)
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             self.reconnectTask = nil
             self.connect()

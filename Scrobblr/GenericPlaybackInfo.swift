@@ -6,15 +6,15 @@
 //
 import SwiftUI
 
-struct GenericPlaybackInfo: Codable, Equatable {
+struct GenericPlaybackInfo: Codable, Equatable, Identifiable {
     let title: String
     let artist: String
     let album: String?
     
     let durationSeconds: Int
-    let elapsedTimeSeconds: Int
+    var elapsedTimeSeconds: Int
 
-    let isPlaying: Bool
+    var isPlaying: Bool
 
     var coverURL: URL? = nil
 
@@ -22,17 +22,11 @@ struct GenericPlaybackInfo: Codable, Equatable {
         "\(artist) - \(title)"
     }
 
-    /// "Artist • Album", subtitle on the player
-    var subtitle: String {
-        "\(artist) • \(album ?? "Unknown Album")"
-    }
-
     var id: String {
         "\(artist)\u{1}\(title)\u{1}\(album ?? "")"
     }
 
-    /// A copy of this playback state with title/artist/album replaced by the
-    /// corrected metadata from `scrobble`, keeping the original timing.
+    /// copy with title, artist and album taken from `scrobble`, keeping the original timing
     func withMetadata(from scrobble: Scrobble) -> GenericPlaybackInfo {
         GenericPlaybackInfo(
             title: scrobble.track,
@@ -52,38 +46,22 @@ struct GenericPlaybackInfo: Codable, Equatable {
     }
 
     func withPlaying(_ isPlaying: Bool) -> GenericPlaybackInfo {
-        GenericPlaybackInfo(
-            title: title,
-            artist: artist,
-            album: album,
-            durationSeconds: durationSeconds,
-            elapsedTimeSeconds: elapsedTimeSeconds,
-            isPlaying: isPlaying,
-            coverURL: coverURL
-        )
+        var copy = self
+        copy.isPlaying = isPlaying
+        return copy
     }
 
     func withElapsedTimeSeconds(_ elapsedTimeSeconds: Int) -> GenericPlaybackInfo {
-        GenericPlaybackInfo(
-            title: title,
-            artist: artist,
-            album: album,
-            durationSeconds: durationSeconds,
-            elapsedTimeSeconds: elapsedTimeSeconds,
-            isPlaying: isPlaying,
-            coverURL: coverURL
-        )
+        var copy = self
+        copy.elapsedTimeSeconds = elapsedTimeSeconds
+        return copy
     }
 
-    func adjustedForRelayDrift(since updatedAt: Date) -> GenericPlaybackInfo? {
+    func adjustedForRelayDrift(since updatedAt: Date, now: Date = Date()) -> GenericPlaybackInfo? {
         guard isPlaying else { return self }
-        let drift = max(0, Int(Date().timeIntervalSince(updatedAt).rounded()))
+        let drift = max(0, Int(now.timeIntervalSince(updatedAt).rounded()))
         let adjusted = elapsedTimeSeconds + drift
         if durationSeconds > 0, adjusted >= durationSeconds { return nil }
         return withElapsedTimeSeconds(adjusted)
-    }
-
-    static func == (lhs: GenericPlaybackInfo, rhs: GenericPlaybackInfo) -> Bool {
-        lhs.displayName == rhs.displayName && lhs.album == rhs.album
     }
 }

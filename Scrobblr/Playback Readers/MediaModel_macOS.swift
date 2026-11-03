@@ -7,6 +7,7 @@
 
 #if os(macOS)
 import MediaRemoteAdapter
+import SwiftData
 import SwiftUI
 import os
 
@@ -15,52 +16,36 @@ import os
 final class MediaModel {
     let manager: ScrobblerManager
 
-    /// The current cover art, tracked separately from the metadata: the player
-    /// often delivers a track's metadata before its artwork, so the cover fades
-    /// in once it arrives rather than blocking the rest of the UI. Used for
-    /// the backdrop, as the actual cover is fetched from last.fm for better
-    /// quality.
-    private(set) var artwork: NSImage?
-
     @ObservationIgnored private let mediaController = MediaController()
 
-    init(manager: ScrobblerManager, settings: Settings) {
+    init(manager: ScrobblerManager, settings: Settings, modelContainer: ModelContainer) {
         self.manager = manager
-        
+
         mediaController.onTrackInfoReceived = { [weak self] trackInfo in
             guard let self else { return }
             guard let payload = trackInfo?.payload, let title = payload.title, let artist = payload.artist else {
-                self.clear()
+                self.manager.update(nil)
                 return
             }
+            
+            guard payload.bundleIdentifier == "com.apple.Music" else { return }
 
             let info = GenericPlaybackInfo(
                 title: title,
                 artist: artist,
                 album: payload.album,
                 durationSeconds: Int((payload.durationMicros ?? 0) / 1_000_000),
-                elapsedTimeSeconds: Int((payload.elapsedTimeMicros ?? 0) / 1_000_000),
+                elapsedTimeSeconds: Int(payload.currentElapsedTime ?? (payload.elapsedTimeMicros ?? 0) / 1_000_000),
                 isPlaying: payload.isPlaying ?? false
             )
             self.manager.update(info)
-            self.updateArtwork(payload.artwork)
         }
 
         mediaController.onListenerTerminated = { [weak self] in
-            self?.clear()
+            self?.manager.update(nil)
         }
 
         mediaController.startListening()
-    }
-
-    /// Adopts artwork for the current track.
-    private func updateArtwork(_ image: NSImage?) {
-        artwork = image
-    }
-
-    private func clear() {
-        self.manager.update(nil)
-        artwork = nil
     }
 
     deinit {

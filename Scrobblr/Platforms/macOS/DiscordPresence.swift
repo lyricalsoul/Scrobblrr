@@ -10,24 +10,24 @@ import Foundation
 import SwiftRPC
 import os
 
+enum ConnectionStatus: Equatable {
+    case disabled
+    case connecting
+    case connected
+    case error(String)
+}
+
 @MainActor
 @Observable
 final class DiscordPresence {
-    enum Status: Equatable {
-        case disabled
-        case connecting
-        case connected
-        case error(String)
-    }
-
-    private(set) var status: Status = .disabled
+    private(set) var status: ConnectionStatus = .disabled
 
     @ObservationIgnored private var rpc: SwiftRPC?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var pendingUpdate: (info: GenericPlaybackInfo?, coverURL: URL?)?
     @ObservationIgnored private var isConnected = false
 
-    private static let reconnectInterval: Duration = .seconds(3)
+    @ObservationIgnored private var backoff = Backoff(max: .seconds(30))
 
     func start() {
         guard rpc == nil else { return }
@@ -41,6 +41,7 @@ final class DiscordPresence {
                 Logger.discord.info("Connected to Discord")
                 self?.status = .connected
                 self?.isConnected = true
+                self?.backoff.reset()
                 self?.reconnectTask?.cancel()
                 self?.reconnectTask = nil
                 if let pending = self?.pendingUpdate {
@@ -122,8 +123,9 @@ final class DiscordPresence {
 
     private func scheduleReconnect() {
         guard reconnectTask == nil else { return }
+        let delay = backoff.next()
         reconnectTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.reconnectInterval)
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             self.reconnectTask = nil
             self.attemptConnect()

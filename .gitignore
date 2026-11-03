@@ -1,0 +1,7 @@
+.sentryclirc
+xcuserdata/
+DerivedData/
+.DS_Store
+*.profraw
+.build/
+.superpowers/

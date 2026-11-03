@@ -20,7 +20,6 @@ final class LoginItemController {
 
     var isEnabled: Bool { status == .enabled }
 
-    /// Still pending approval on System Settings
     var requiresApproval: Bool { status == .requiresApproval }
 
     func setEnabled(_ enabled: Bool) {

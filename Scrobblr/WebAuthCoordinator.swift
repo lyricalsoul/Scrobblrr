@@ -16,7 +16,6 @@ import AppKit
 @MainActor
 final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentationContextProviding {
 
-    /// The custom URL scheme registered for the Last.fm auth callback
     static let callbackScheme = "scrobblr"
 
     func signIn(_ scrobbler: LastFMScrobbler) async {
@@ -48,10 +47,12 @@ final class WebAuthCoordinator: NSObject, ASWebAuthenticationPresentationContext
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
             #if os(iOS)
-            let scene = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first { $0.activationState == .foregroundActive }
-            return scene?.keyWindow ?? ASPresentationAnchor()
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+            if let scene {
+                return scene.keyWindow ?? UIWindow(windowScene: scene)
+            }
+            return ASPresentationAnchor()
             #elseif os(macOS)
             return NSApplication.shared.keyWindow
                 ?? NSApplication.shared.windows.first

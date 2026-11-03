@@ -19,8 +19,8 @@ struct CorrectedEntity {
     }
 
     #if os(macOS)
-    static func from(corrected artist: ArtistFix, original: String) -> CorrectedEntity {
-        .init(originalTitle: original, correctedTitle: artist.mainArtist, reason: artist.reasoning, shouldScrobble: true)
+    static func from(corrected artist: String, original: String) -> CorrectedEntity {
+        .init(originalTitle: original, correctedTitle: artist, reason: "Automatic split", shouldScrobble: true)
     }
     #endif
 

@@ -10,24 +10,47 @@ import SwiftUI
 import SwiftData
 import AppKit
 
+enum SettingsTab: Hashable {
+    case general, scrobbling, account, automaticCorrections, manualCorrections
+}
+
+/// lets other windows ask settings to open on a specific tab
+@Observable
+final class SettingsNavigation {
+    static let shared = SettingsNavigation()
+    var selectedTab: SettingsTab = .general
+    private init() {}
+}
+
 struct SettingsView: View {
     @Bindable var settings: Settings
     let scrobbler: LastFMScrobbler
     let updater: SparkleUpdater
+    let onSignOut: () -> Void
+
+    @State private var navigation = SettingsNavigation.shared
 
     var body: some View {
-        TabView {
+        TabView(selection: $navigation.selectedTab) {
             GeneralSettingsView(settings: settings, updater: updater)
+                .tag(SettingsTab.general)
                 .tabItem { Label("General", systemImage: "gearshape") }
 
             ScrobblingSettingsView(settings: settings)
+                .tag(SettingsTab.scrobbling)
                 .tabItem { Label("Scrobbling", systemImage: "music.note") }
 
-            AccountSettingsView(scrobbler: scrobbler)
+            AccountSettingsView(scrobbler: scrobbler, onSignOut: onSignOut)
+                .tag(SettingsTab.account)
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
 
-            CorrectionsSettingsView()
-                .tabItem { Label("Corrections", systemImage: "character.book.closed") }
+            AutomaticCorrectionsSettingsView()
+                .tag(SettingsTab.automaticCorrections)
+                .tabItem { Label("Automatic Corrections", systemImage: "character.book.closed") }
+
+            ManualCorrectionsSettingsView()
+                .tag(SettingsTab.manualCorrections)
+                .tabItem { Label("Manual Corrections", systemImage: "pencil.and.list.clipboard") }
         }
         .frame(width: 480)
         .onAppear { NSApp.activate(ignoringOtherApps: true) }
@@ -129,6 +152,7 @@ private struct ScrobblingSettingsView: View {
 
 private struct AccountSettingsView: View {
     let scrobbler: LastFMScrobbler
+    let onSignOut: () -> Void
     @State private var webAuth = WebAuthCoordinator()
 
     var body: some View {
@@ -136,9 +160,7 @@ private struct AccountSettingsView: View {
             Section("Last.fm") {
                 if scrobbler.isAuthenticated {
                     LabeledContent("Signed in as", value: scrobbler.username ?? "—")
-                    Button("Sign Out", role: .destructive) {
-                        scrobbler.signOut()
-                    }
+                    Button("Sign Out", role: .destructive, action: onSignOut)
                 } else {
                     Text("Connect your Last.fm account to start scrobbling.")
                         .foregroundStyle(.secondary)
@@ -152,73 +174,119 @@ private struct AccountSettingsView: View {
     }
 }
 
-// MARK: - Corrections
+// MARK: - Automatic Corrections
 
-private struct CorrectionsSettingsView: View {
+private struct AutomaticCorrectionsSettingsView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \AutoCorrect.target) private var rules: [AutoCorrect]
+    @Query(sort: \Correction.title) private var rules: [Correction]
     @State private var selection: Set<PersistentIdentifier> = []
-    @State private var selectedKind: CorrectionEntity = .artist
-
-    /// Rules belonging to the currently selected entity tab
-    private var visibleRules: [AutoCorrect] {
-        rules.filter { $0.kind == selectedKind }
-    }
+    @State private var isAddingRule = false
+    @State private var editingRule: Correction?
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $selectedKind) {
-                ForEach(CorrectionEntity.allCases, id: \.self) { entity in
-                    Text(entity.rawValue.capitalized).tag(entity)
+            Table(rules, selection: $selection) {
+                TableColumn("Title") { rule in
+                    Text(rule.title)
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(8)
-
-            Table(visibleRules, selection: $selection) {
-                TableColumn("Target") { rule in
-                    TextField("Target", text: Binding(
-                        get: { rule.target },
-                        set: { rule.target = $0; try? context.save() }
-                    ))
-                    .textFieldStyle(.plain)
+                TableColumn("Pattern") { rule in
+                    Text(rule.pattern)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
-                TableColumn("Replacement") { rule in                    TextField("Don't scrobble", text: Binding(
-                        get: { rule.replacement ?? "" },
-                        set: { rule.replacement = $0.isEmpty ? nil : $0; try? context.save() }
+                TableColumn("Applies To") { rule in
+                    Text(rule.entities.map { String(localized: $0.title) }.joined(separator: ", "))
+                }
+                TableColumn("Enabled") { rule in
+                    Toggle("", isOn: Binding(
+                        get: { rule.isEnabled },
+                        set: { rule.isEnabled = $0; try? context.save() }
                     ))
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(rule.replacement == nil ? .secondary : .primary)
+                    .labelsHidden()
                 }
             }
 
             Divider()
 
             HStack(spacing: 4) {
-                Button {
-                    addRule()
-                } label: {
-                    Image(systemName: "plus")
+                Button { isAddingRule = true } label: { Image(systemName: "plus") }
+                Button { deleteSelected() } label: { Image(systemName: "minus") }
+                    .disabled(selection.isEmpty)
+                Divider().frame(height: 16)
+                Button("Edit…") {
+                    if let id = selection.first {
+                        editingRule = rules.first { $0.persistentModelID == id }
+                    }
                 }
-                Button {
-                    deleteSelected()
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .disabled(selection.isEmpty)
+                .disabled(selection.count != 1)
                 Spacer()
             }
             .buttonStyle(.borderless)
             .padding(6)
         }
+        .correctionSheets(isAdding: $isAddingRule, editing: $editingRule, in: context)
     }
 
-    private func addRule() {
-        let rule = AutoCorrect(target: "", replacement: "", kind: selectedKind)
-        context.insert(rule)
+    private func deleteSelected() {
+        for id in selection {
+            if let rule = rules.first(where: { $0.persistentModelID == id }) {
+                context.delete(rule)
+            }
+        }
         try? context.save()
-        selection = [rule.persistentModelID]
+        selection.removeAll()
+    }
+}
+
+// MARK: - Manual Corrections
+
+private struct ManualCorrectionsSettingsView: View {
+    @Environment(\.modelContext) private var context
+    @Query(sort: \ManualCorrection.artistName) private var rules: [ManualCorrection]
+    @State private var selection: Set<PersistentIdentifier> = []
+    @State private var isAddingRule = false
+    @State private var editingRule: ManualCorrection?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Table(rules, selection: $selection) {
+                TableColumn("Type") { rule in
+                    Text(rule.kind.title)
+                }
+                TableColumn("Track") { rule in
+                    Text(rule.kind == .track ? rule.trackName : "")
+                }
+                TableColumn("Album") { rule in
+                    Text(rule.kind == .track || rule.kind == .album ? rule.albumName : "")
+                }
+                TableColumn("Artist") { rule in
+                    Text(rule.artistName)
+                }
+                TableColumn("Replacement") { rule in
+                    rule.replacement.map { Text(verbatim: $0) } ?? Text("Don't scrobble")
+                        .foregroundStyle(rule.replacement == nil ? .secondary : .primary)
+                }
+            }
+
+            Divider()
+
+            HStack(spacing: 4) {
+                Button { isAddingRule = true } label: { Image(systemName: "plus") }
+                Button { deleteSelected() } label: { Image(systemName: "minus") }
+                    .disabled(selection.isEmpty)
+                Divider().frame(height: 16)
+                Button("Edit…") {
+                    if let id = selection.first {
+                        editingRule = rules.first { $0.persistentModelID == id }
+                    }
+                }
+                .disabled(selection.count != 1)
+                Spacer()
+            }
+            .buttonStyle(.borderless)
+            .padding(6)
+        }
+        .manualCorrectionSheets(isAdding: $isAddingRule, editing: $editingRule, in: context)
     }
 
     private func deleteSelected() {

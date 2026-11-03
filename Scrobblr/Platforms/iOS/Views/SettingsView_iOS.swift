@@ -12,13 +12,16 @@ import SwiftData
 struct SettingsView: View {
     @Bindable var settings: Settings
     let scrobbler: LastFMScrobbler
+    let onSignOut: () -> Void
 
     var body: some View {
         Form {
             ScrobblingSection(settings: settings)
-            CorrectionSection()
-            AccountSection(scrobbler: scrobbler)
+            AutomaticCorrectionSection()
+            ManualCorrectionSection()
+            AccountSection(scrobbler: scrobbler, onSignOut: onSignOut)
             PresenceSection(settings: settings)
+            ExperimentalSection(settings: settings)
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -35,6 +38,22 @@ private struct PresenceSection: View {
             Toggle("Share now playing across devices", isOn: $settings.crossDevicePresenceEnabled)
         } footer: {
             Text("Lets a Mac with Scrobblrr and Discord open show what you're listening to here. Your data is protected and only your last.fm account can access it.")
+        }
+    }
+}
+
+// MARK: - Experimental
+
+private struct ExperimentalSection: View {
+    @Bindable var settings: Settings
+
+    var body: some View {
+        Section {
+            Toggle("Use MPMusicPlayerController recovery", isOn: $settings.useMPMusicPlayerRecovery)
+        } header: {
+            Text("Experimental")
+        } footer: {
+            Text("Recovers a stale now-playing connection by resetting MPMusicPlayerController instead of the silent audio session.")
         }
     }
 }
@@ -68,20 +87,32 @@ private struct ScrobblingSection: View {
     }
 }
 
-// MARK: - Correction
+// MARK: - Corrections
 
-private struct CorrectionSection: View {
+private struct AutomaticCorrectionSection: View {
     var body: some View {
         Section {
             NavigationLink {
-                CorrectionsListView()
+                AutomaticCorrectionsListView()
             } label: {
-                Text("Saved Corrections")
+                Text("Automatic Corrections")
             }
-        } header: {
-            Text("Automatic Corrections")
         } footer: {
-            Text("Corrections made automatically or by hand can be overwritten in Saved Corrections.")
+            Text("Pattern-based rules that rewrite or skip tracks and albums before scrobbling.")
+        }
+    }
+}
+
+private struct ManualCorrectionSection: View {
+    var body: some View {
+        Section {
+            NavigationLink {
+                ManualCorrectionsListView()
+            } label: {
+                Text("Manual Corrections")
+            }
+        } footer: {
+            Text("Exact overrides for specific tracks, albums, or artists.")
         }
     }
 }
@@ -90,15 +121,14 @@ private struct CorrectionSection: View {
 
 private struct AccountSection: View {
     let scrobbler: LastFMScrobbler
+    let onSignOut: () -> Void
     @State private var webAuth = WebAuthCoordinator()
 
     var body: some View {
         Section("Last.fm") {
             if scrobbler.isAuthenticated {
                 LabeledContent("Signed in as", value: scrobbler.username ?? "—")
-                Button("Sign Out", role: .destructive) {
-                    scrobbler.signOut()
-                }
+                Button("Sign Out", role: .destructive, action: onSignOut)
             } else {
                 Button("Sign In to Last.fm…") {
                     Task { await webAuth.signIn(scrobbler) }
@@ -108,95 +138,47 @@ private struct AccountSection: View {
     }
 }
 
-// MARK: - Corrections
+// MARK: - Manual Corrections
 
-private struct CorrectionsListView: View {
+private struct ManualCorrectionsListView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \AutoCorrect.target) private var rules: [AutoCorrect]
-    @State private var showingEditor = false
+    @Query(sort: \ManualCorrection.artistName) private var rules: [ManualCorrection]
+    @State private var isAddingRule = false
+    @State private var editingRule: ManualCorrection?
 
     var body: some View {
         List {
-            ForEach(CorrectionEntity.allCases, id: \.self) { kind in
-                let kindRules = rules.filter { $0.kind == kind }
-                if !kindRules.isEmpty {
-                    Section(kind.rawValue.capitalized) {
-                        ForEach(kindRules) { rule in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(rule.target)
-                                Text(rule.replacement ?? "Don't scrobble")
-                                    .font(.footnote)
-                                    .foregroundStyle(rule.replacement == nil ? .secondary : .primary)
-                            }
-                        }
-                        .onDelete { offsets in
-                            for index in offsets { context.delete(kindRules[index]) }
-                            try? context.save()
-                        }
+            ForEach(rules) { rule in
+                Button {
+                    editingRule = rule
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rule.kind == .track ? rule.trackName : (rule.kind == .album ? rule.albumName : rule.artistName))
+                        rule.replacement.map { Text(verbatim: $0) } ?? Text("Don't scrobble")
+                            .font(.footnote)
+                            .foregroundStyle(rule.replacement == nil ? .secondary : .primary)
                     }
                 }
+                .buttonStyle(.plain)
+            }
+            .onDelete { offsets in
+                for index in offsets { context.delete(rules[index]) }
+                try? context.save()
             }
         }
         .overlay {
             if rules.isEmpty {
-                ContentUnavailableView("No Corrections", systemImage: "character.book.closed", description: Text("Add a rule to rewrite or skip tracks before scrobbling."))
+                ContentUnavailableView("No Manual Corrections", systemImage: "pencil.and.list.clipboard", description: Text("Add an exact override for a specific track, album, or artist."))
             }
         }
-        .navigationTitle("Corrections")
+        .navigationTitle("Manual Corrections")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showingEditor = true } label: { Image(systemName: "plus") }
+                Button { isAddingRule = true } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(isPresented: $showingEditor) {
-            CorrectionEditor { target, replacement, kind in
-                context.insert(AutoCorrect(target: target, replacement: replacement, kind: kind))
-                try? context.save()
-            }
-        }
-    }
-}
-
-private struct CorrectionEditor: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var target = ""
-    @State private var replacement = ""
-    @State private var doNotScrobble = false
-    @State private var kind: CorrectionEntity = .artist
-
-    let onAdd: (String, String?, CorrectionEntity) -> Void
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Target", text: $target)
-                Picker("Type", selection: $kind) {
-                    ForEach(CorrectionEntity.allCases, id: \.self) { entity in
-                        Text(entity.rawValue.capitalized).tag(entity)
-                    }
-                }
-                Toggle("Don't scrobble matches", isOn: $doNotScrobble)
-                if !doNotScrobble {
-                    TextField("Replacement", text: $replacement)
-                }
-            }
-            .navigationTitle("New Correction")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        onAdd(target, doNotScrobble ? nil : replacement, kind)
-                        dismiss()
-                    }
-                    .disabled(target.isEmpty || (!doNotScrobble && replacement.isEmpty))
-                }
-            }
-        }
+        .manualCorrectionSheets(isAdding: $isAddingRule, editing: $editingRule, in: context)
     }
 }
 #endif

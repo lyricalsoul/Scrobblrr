@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CachedAsyncImage
+import os
 
 enum InfoMetrics {
     #if os(macOS)
@@ -21,18 +22,82 @@ enum InfoMetrics {
     static let titleFrameAlignment = Alignment.center
     #endif
 
-    #if os(macOS)
     static func macCoverSide(for size: CGSize) -> CGFloat {
         let ideal = min(size.width * 0.42, size.height - 56)
         return max(240, min(ideal, 480))
     }
-    #endif
+
+    static func isWide(_ size: CGSize) -> Bool {
+        size.width >= 700 || size.width > size.height
+    }
 }
 
 struct InfoStat: Identifiable {
     let value: Int
     let caption: String
     var id: String { caption }
+
+    static func counts(listeners: Int, scrobbles: Int, mine: Int?) -> [InfoStat] {
+        var stats = [InfoStat(value: listeners, caption: "Listeners"), InfoStat(value: scrobbles, caption: "Scrobbles")]
+        if let mine { stats.append(InfoStat(value: mine, caption: "Your Scrobbles")) }
+        return stats
+    }
+}
+
+/// fetches an entity for an info page, with loading and retry states
+struct InfoLoader<Info, Content: View>: View {
+    let id: String
+    let name: String
+    let fetch: () async throws -> Info
+    @ViewBuilder let content: (Info) -> Content
+
+    private enum LoadState {
+        case loading
+        case loaded(Info)
+        case failed
+    }
+
+    @State private var state: LoadState = .loading
+
+    var body: some View {
+        loadedContent
+            .navigationTitle("")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            #endif
+            .task(id: id) { await load() }
+    }
+
+    @ViewBuilder
+    private var loadedContent: some View {
+        switch state {
+        case .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed:
+            ContentUnavailableView {
+                Label("Couldn't Load", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text("Something went wrong fetching \(name).")
+            } actions: {
+                Button("Try Again") { Task { await load() } }
+                    .buttonStyle(.borderedProminent)
+            }
+        case let .loaded(info):
+            content(info)
+        }
+    }
+
+    private func load() async {
+        state = .loading
+        do {
+            state = .loaded(try await fetch())
+        } catch {
+            Logger.epistolares.error("Couldn't fetch \(name, privacy: .public) (\(id, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+            state = .failed
+        }
+    }
 }
 
 struct InfoView<Extra: View>: View {
@@ -50,40 +115,65 @@ struct InfoView<Extra: View>: View {
     @State private var bioExpanded = false
 
     var body: some View {
-        #if os(macOS)
         GeometryReader { geo in
+            #if os(macOS)
             ScrollView {
-                macLayout(side: InfoMetrics.macCoverSide(for: geo.size))
+                sideBySideLayout(side: InfoMetrics.macCoverSide(for: geo.size))
             }
+            #else
+            if InfoMetrics.isWide(geo.size) {
+                wideColumns(side: InfoMetrics.macCoverSide(for: geo.size))
+            } else {
+                ScrollView { stackedLayout }
+                    .ignoresSafeArea(edges: .top)
+            }
+            #endif
         }
         .background { AnimatedBackdrop(url: coverURL) }
-        #else
-        ScrollView {
-            VStack(spacing: 22) {
-                cover
-                VStack(spacing: 22) {
-                    titleBlock
+    }
+
+    #if os(iOS)
+    private func wideColumns(side: CGFloat) -> some View {
+        HStack(spacing: 28) {
+            sideBySideCover(side: side)
+                .frame(maxHeight: .infinity)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    titleBlock(leading: true)
                     if !stats.isEmpty { statsRow }
                     if !tags.isEmpty { tagsRow }
                     bioBlock
                     extra()
                 }
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 24)
+                .padding(.vertical, 28)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
-        .ignoresSafeArea(edges: .top)
-        .background { AnimatedBackdrop(url: coverURL) }
-        #endif
+        .padding(.horizontal, 28)
     }
 
-    #if os(macOS)
-    private func macLayout(side: CGFloat) -> some View {
+    private var stackedLayout: some View {
+        VStack(spacing: 22) {
+            cover
+            VStack(spacing: 22) {
+                titleBlock()
+                if !stats.isEmpty { statsRow }
+                if !tags.isEmpty { tagsRow }
+                bioBlock
+                extra()
+            }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 24)
+        }
+    }
+    #endif
+
+    private func sideBySideLayout(side: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 28) {
-            macCover(side: side)
+            sideBySideCover(side: side)
             VStack(alignment: .leading, spacing: 22) {
-                titleBlock
+                titleBlock(leading: true)
                 if !stats.isEmpty { statsRow }
                 if !tags.isEmpty { tagsRow }
                 bioBlock
@@ -94,12 +184,10 @@ struct InfoView<Extra: View>: View {
         .padding(28)
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
-    #endif
 
     // MARK: - Cover
 
-    #if os(macOS)
-    private func macCover(side: CGFloat) -> some View {
+    private var coverImage: some View {
         CachedAsyncImage(url: coverURL) { image in
             image
                 .resizable()
@@ -109,45 +197,42 @@ struct InfoView<Extra: View>: View {
                 .fill(.quaternary)
                 .overlay(Image(systemName: "music.note").font(.system(size: 56)).foregroundStyle(.secondary))
         }
-        .frame(width: side, height: side)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(radius: 18, y: 10)
     }
-    #else
+
+    private func sideBySideCover(side: CGFloat) -> some View {
+        coverImage
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(radius: 18, y: 10)
+    }
+
+    #if os(iOS)
     private var cover: some View {
-        CachedAsyncImage(url: coverURL) { image in
-            image
-                .resizable()
-                .scaledToFill()
-        } placeholder: {
-            Rectangle()
-                .fill(.quaternary)
-                .overlay(Image(systemName: "music.note").font(.system(size: 56)).foregroundStyle(.secondary))
-        }
-        .frame(width: 1, height: 450)
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .mask(
-            LinearGradient(
-                stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: 0.62),
-                    .init(color: .clear, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
+        Color.clear
+            .frame(height: 450)
+            .overlay { coverImage }
+            .clipped()
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.62),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
-        )
     }
     #endif
 
     // MARK: - Title
 
-    private var titleBlock: some View {
-        VStack(alignment: InfoMetrics.titleAlignment, spacing: 4) {
+    private func titleBlock(leading: Bool = InfoMetrics.titleAlignment == .leading) -> some View {
+        VStack(alignment: leading ? .leading : .center, spacing: 4) {
             Text(title)
                 .font(.largeTitle.weight(.bold))
-                .multilineTextAlignment(InfoMetrics.titleTextAlignment)
+                .multilineTextAlignment(leading ? .leading : .center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
 
@@ -158,7 +243,7 @@ struct InfoView<Extra: View>: View {
                     .lineLimit(1)
             }
         }
-        .frame(maxWidth: .infinity, alignment: InfoMetrics.titleFrameAlignment)
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
         .padding(.horizontal, InfoMetrics.hMargin)
     }
 
@@ -166,7 +251,7 @@ struct InfoView<Extra: View>: View {
 
     private var statsRow: some View {
         HStack(spacing: 0) {
-            ForEach(Array(stats.enumerated()), id: \.element.id) { index, stat in
+            ForEach(stats.enumerated(), id: \.element.id) { index, stat in
                 if index > 0 { Divider().frame(height: 34) }
                 StatPill(value: stat.value, caption: stat.caption)
             }
@@ -180,12 +265,13 @@ struct InfoView<Extra: View>: View {
     // MARK: - Tags
 
     private var tagsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(tags, id: \.self) { TagChip(text: $0) }
             }
             .padding(.horizontal, InfoMetrics.hMargin)
         }
+        .scrollIndicators(.hidden)
     }
 
     // MARK: - Biography
@@ -237,7 +323,7 @@ struct ArtistSimilarSection: View {
                 .font(.headline)
                 .padding(.horizontal, InfoMetrics.hMargin)
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 16) {
                     ForEach(artists) { artist in
                         NavigationLink(value: InfoRoute.artist(id: artist.id, name: artist.name)) {
@@ -248,6 +334,7 @@ struct ArtistSimilarSection: View {
                 }
                 .padding(.horizontal, InfoMetrics.hMargin)
             }
+            .scrollIndicators(.hidden)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -269,7 +356,7 @@ struct AlbumTrackSection: View {
             Text("Tracks")
                 .font(.headline)
 
-            DividedGlassCard(items: numberedTracks) { item in
+            DividedGlassCard(items: numberedTracks, id: \.track.id) { item in
                 NavigationLink(value: InfoRoute.track(id: item.track.id, name: item.track.name)) {
                     AlbumTrackRow(number: item.number, name: item.track.name)
                 }
@@ -339,20 +426,22 @@ private struct TrackRelatedRow: View {
 
 // MARK: - Shared pieces
 
-struct DividedGlassCard<Item, Row: View>: View {
+struct DividedGlassCard<Item, ID: Hashable, Row: View>: View {
     let items: [Item]
+    let id: KeyPath<Item, ID>
     var dividerLeadingInset: CGFloat = 44
     @ViewBuilder var row: (Item) -> Row
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                if index > 0 {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(items, id: id) { item in
+                if item[keyPath: id] != items.first?[keyPath: id] {
                     Divider().padding(.leading, dividerLeadingInset)
                 }
                 row(item)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(in: .rect(cornerRadius: 14))
     }
 }
@@ -445,31 +534,3 @@ private struct AlbumTrackRow: View {
         .padding(.vertical, 11)
     }
 }
-
-struct InfoLoadFailed: View {
-    let name: String
-    let retry: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Couldn't Load", systemImage: "wifi.exclamationmark")
-        } description: {
-            Text("Something went wrong fetching \(name).")
-        } actions: {
-            Button("Try Again", action: retry)
-                .buttonStyle(.borderedProminent)
-        }
-    }
-}
-
-extension View {
-    func infoNavigationChrome() -> some View {
-        self
-            .navigationTitle("")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            #endif
-    }
-}
-

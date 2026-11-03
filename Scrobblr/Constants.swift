@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Constants {
+nonisolated struct Constants {
     static let lfmApiKey = "573c000d85b8fd294e09fbf4bcc50bf0"
     static let lfmApiSecret = "a2eaf6c578c8d0bfda2c4846205aad0c"
 

@@ -17,9 +17,9 @@ struct AnimatedBackdrop: View {
 
     var body: some View {
         ZStack {
-            layer(scale: breathe ? 1.28 : 1.12)
+            layer(scale: breathe ? 1.65 : 1.45)
 
-            layer(scale: breathe ? 1.12 : 1.28)
+            layer(scale: breathe ? 1.45 : 1.65)
                 .blendMode(.colorBurn)
                 .opacity(0.35)
         }
@@ -54,7 +54,7 @@ struct AnimatedBackdrop: View {
                 .blur(radius: 120, opaque: true)
                 .scaleEffect(scale)
         } placeholder: {
-            Color.clear
+            Rectangle().fill(.quaternary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()

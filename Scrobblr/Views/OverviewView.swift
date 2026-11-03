@@ -11,33 +11,39 @@ import CachedAsyncImage
 
 struct OverviewView: View {
     let manager: ScrobblerManager
+    @State private var correctionsTrack: GenericPlaybackInfo?
 
     var body: some View {
-        #if os(macOS)
-        GeometryReader { geo in
-            if let track = manager.displayInfo {
-                macCard(for: track, in: geo.size)
-            } else {
-                emptyState
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            #if os(macOS)
+            GeometryReader { geo in
+                if let track = manager.displayInfo {
+                    macCard(for: track, in: geo.size)
+                } else {
+                    emptyState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
-        }
-        .navigationTitle("Now Playing")
-        #else
-        ScrollView {
-            if let track = manager.current {
-                iosCard(for: track)
-                    .frame(maxWidth: 520)
-                    .frame(maxWidth: .infinity)
-            } else {
-                emptyState.padding(.top, 80)
+            .navigationTitle("Now Playing")
+            #else
+            ScrollView {
+                if let track = manager.current {
+                    iosCard(for: track)
+                        .frame(maxWidth: 520)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    emptyState.padding(.top, 80)
+                }
             }
+            .background {
+                AnimatedBackdrop(url: manager.coverImageUrl)
+            }
+            .navigationTitle("Now Playing")
+            #endif
         }
-        .background {
-            AnimatedBackdrop(url: manager.coverImageUrl)
+        .sheet(item: $correctionsTrack) { track in
+            CorrectionQuickEditSheet(track: track, manager: manager)
         }
-        .navigationTitle("Now Playing")
-        #endif
     }
 
 
@@ -97,72 +103,62 @@ struct OverviewView: View {
     // MARK: - Header (title + artist)
 
     private func header(for track: GenericPlaybackInfo) -> some View {
-        VStack(alignment: Self.hAlign, spacing: 4) {
+        VStack(alignment: InfoMetrics.titleAlignment, spacing: 4) {
             Text(track.title)
                 .font(.title.weight(.bold))
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
                 .textSelection(.enabled)
 
-            Text(track.artist)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .textSelection(.enabled)
+            HStack(spacing: 6) {
+                Text(track.artist)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+
+                Button {
+                    correctionsTrack = (track.id == manager.current?.id) ? (manager.rawCurrent ?? track) : track
+                } label: {
+                    Image(systemName: "pencil.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .multilineTextAlignment(Self.textAlign)
-        .frame(maxWidth: .infinity, alignment: Self.frameAlignment)
+        .multilineTextAlignment(InfoMetrics.titleTextAlignment)
+        .frame(maxWidth: .infinity, alignment: InfoMetrics.titleFrameAlignment)
     }
 
     // MARK: - Stats card
 
     private func statsCard(for track: GenericPlaybackInfo) -> some View {
         VStack(spacing: 0) {
-            let trackRow = StatRow(
+            StatRow(
                 leading: iconBadge("music.note"),
                 title: track.title,
                 count: manager.currentTrackScrobbles
             )
-            if let trackID = manager.displayTrackInfo?.track.id {
-                NavigationLink(value: InfoRoute.track(id: trackID, name: track.title)) {
-                    trackRow
-                }
-                .buttonStyle(.plain)
-            } else {
-                trackRow
-            }
+            .infoLink(manager.displayTrackInfo?.track.id.map { .track(id: $0, name: track.title) })
 
             if let album = track.album, !album.isEmpty {
                 rowDivider
-                let albumRow = StatRow(
+                StatRow(
                     leading: coverThumb(size: 34),
                     title: album,
                     count: manager.currentAlbumScrobbles
                 )
-                if let albumID = manager.displayTrackInfo?.album?.id {
-                    NavigationLink(value: InfoRoute.album(id: albumID, name: album)) {
-                        albumRow
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    albumRow
-                }
+                .infoLink(manager.displayTrackInfo?.album?.id.map { .album(id: $0, name: album) })
             }
 
             rowDivider
-            let artistRow = StatRow(
+            StatRow(
                 leading: artistPhoto(size: 34),
                 title: track.artist,
                 count: manager.currentArtistScrobbles
             )
-            if let artistID = manager.displayTrackInfo?.artist.id {
-                NavigationLink(value: InfoRoute.artist(id: artistID, name: track.artist)) {
-                    artistRow
-                }
-                .buttonStyle(.plain)
-            } else {
-                artistRow
-            }
+            .infoLink(manager.displayTrackInfo?.artist.id.map { .artist(id: $0, name: track.artist) })
         }
         .glassEffect(in: .rect(cornerRadius: 14))
     }
@@ -181,7 +177,7 @@ struct OverviewView: View {
         #endif
     }
 
-    /// The raw, unsized cover image; callers apply the frame/clip they need
+    /// raw cover image, callers apply the frame and clip they need
     private var albumArtImage: some View {
         CachedAsyncImage(url: resolvedCoverURL) { image in
             image
@@ -239,18 +235,6 @@ struct OverviewView: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
     }
-
-    // MARK: - Layout constants
-
-    #if os(macOS)
-    static let hAlign = HorizontalAlignment.leading
-    static let textAlign = TextAlignment.leading
-    static let frameAlignment = Alignment.leading
-    #else
-    static let hAlign = HorizontalAlignment.center
-    static let textAlign = TextAlignment.center
-    static let frameAlignment = Alignment.center
-    #endif
 }
 
 // MARK: - Stat row

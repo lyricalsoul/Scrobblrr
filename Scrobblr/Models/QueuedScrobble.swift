@@ -10,16 +10,13 @@ import SwiftData
 
 @Model
 final class QueuedScrobble {
-    /// `Scrobbable.name` of the destination this row is pending for
+    /// `Scrobbable.name` of the destination
     var serviceName: String
 
-    /// JSON-encoded `Scrobble` payload
     var payloadData: Data
 
-    /// How many submission attempts have already failed
     var attempt: Int
 
-    /// Earliest time the next attempt should be made
     var nextAttempt: Date
 
     var createdAt: Date
@@ -32,7 +29,7 @@ final class QueuedScrobble {
         self.createdAt = createdAt
     }
 
-    /// The decoded payload, or `nil` if it can no longer be read.
+    /// `nil` if the payload can no longer be read
     var scrobble: Scrobble? {
         try? JSONDecoder().decode(Scrobble.self, from: payloadData)
     }

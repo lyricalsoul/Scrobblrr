@@ -8,6 +8,7 @@
 
 #if os(iOS)
 import AVFoundation
+import Sentry
 import os
 
 @MainActor
@@ -33,6 +34,7 @@ final class SilentAudioKeeper {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 Logger.playback.error("Audio media services were reset, rebuilding keeper")
+                SentrySDK.capture(message: "AVAudioSession media services were reset")
                 self?.player = nil
                 self?.configureAndPlay()
             }
@@ -81,7 +83,7 @@ final class SilentAudioKeeper {
 
         if player == nil {
             player = try? AVAudioPlayer(contentsOf: url)
-            player?.numberOfLoops = -1   // loop forever
+            player?.numberOfLoops = -1
             player?.volume = 0
         }
         player?.play()

@@ -15,7 +15,13 @@ enum CollageTheme: String, CaseIterable, Identifiable {
     case asymmetric = "Asymmetric"
     var id: String { rawValue }
 
-    /// The theme name the Ditto API expects.
+    var title: LocalizedStringResource {
+        switch self {
+        case .classic:    "Classic"
+        case .asymmetric: "Asymmetric"
+        }
+    }
+
     var apiValue: String {
         switch self {
         case .classic:     "classic_collage"
@@ -23,19 +29,16 @@ enum CollageTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Asymmetric layouts size themselves; rows/columns/padding aren't configurable.
+    /// asymmetric layouts size themselves, rows, columns and padding aren't configurable
     var supportsGrid: Bool { self == .classic }
 }
 
-/// Generates collage images for a given Last.fm user via a ditto server (https://github.com/musicorum-app/ditto)
+/// generates collage images for a last.fm user via a ditto server (https://github.com/musicorum-app/ditto)
 struct Ditto {
     let username: String
+    var session: URLSession = .shared
 
     // TODO: super users should be able to change this in the settings
-
-    init(username: String) {
-        self.username = username
-    }
 
     func generateCollage(
         theme: CollageTheme,
@@ -66,7 +69,7 @@ struct Ditto {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(GenerateRequest(theme: theme.apiValue, data: data))
 
-        let (responseData, response) = try await URLSession.shared.data(for: request)
+        let (responseData, response) = try await session.data(for: request)
 
         guard let http = response as? HTTPURLResponse else {
             throw DittoError.badResponse

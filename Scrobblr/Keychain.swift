@@ -10,11 +10,11 @@ import Security
 import os
 
 enum Keychain {
-    private static let service = "io.lyricalsoul.Scrobblrr.credentials"
+    static let service = "io.lyricalsoul.Scrobblrr.credentials"
 
-    static func set(_ value: String?, for account: String) {
+    static func set(_ value: String?, for account: String, service: String = Keychain.service) {
         guard let value, let data = value.data(using: .utf8) else {
-            remove(account)
+            remove(account, service: service)
             return
         }
 
@@ -39,7 +39,7 @@ enum Keychain {
         }
     }
 
-    static func get(_ account: String) -> String? {
+    static func get(_ account: String, service: String = Keychain.service) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -59,7 +59,7 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func remove(_ account: String) {
+    static func remove(_ account: String, service: String = Keychain.service) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

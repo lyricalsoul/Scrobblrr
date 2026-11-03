@@ -44,40 +44,51 @@ Examples:
 
 @ModelActor
 actor AutoCorrector {
-    private let session = LanguageModelSession(instructions: instructions)
+    typealias Splitter = @Sendable (String) async throws -> String
+
+    private var splitter: Splitter = AutoCorrector.splitWithModel
+
+    init(modelContainer: ModelContainer, splitter: @escaping Splitter) {
+        self.modelContainer = modelContainer
+        self.modelExecutor = DefaultSerialModelExecutor(modelContext: ModelContext(modelContainer))
+        self.splitter = splitter
+    }
+
+    nonisolated static func splitWithModel(_ artist: String) async throws -> String {
+        let generated = try await LanguageModelSession(instructions: instructions).respond(to: artist, generating: ArtistFix.self).content
+        Logger.intelligence.debug("Model split “\(artist, privacy: .public)” into “\(generated.mainArtist, privacy: .public)” (\(generated.reasoning, privacy: .public))")
+        return generated.mainArtist
+    }
+
+    nonisolated static func isValidPrefix(_ candidate: String, of credit: String) -> Bool {
+        guard !candidate.isEmpty, credit.lowercased().hasPrefix(candidate.lowercased()) else { return false }
+        let remainder = credit.dropFirst(candidate.count).drop { $0 == " " }
+        return remainder.isEmpty || ",&+と".contains(remainder.first!)
+    }
 
     func correct(artist: String) async -> CorrectedEntity {
-        // A stored rule (manual, or a previously learned correction) wins
-        if let stored = CorrectionStore.storedCorrection(for: artist, entity: .artist, in: modelContext) {
-            return stored
-        }
+        let ruleBased = CorrectionRules.applyCorrections(for: artist, type: .artist, in: modelContext)
+        guard ruleBased.shouldScrobble, ruleBased.reason == nil else { return ruleBased }
 
-        guard needsCorrection(artist: artist) else {
+        guard artist.contains(", ") || artist.contains(" & ") else {
             return .from(original: artist)
         }
 
-        guard let generated = try? await session.respond(to: artist, generating: ArtistFix.self) else {
+        guard let split = try? await splitter(artist) else {
             Logger.intelligence.error("Failed to correct artist \(artist, privacy: .public)")
             return .from(original: artist)
         }
 
-        let corrected = generated.content
-        if !artist.lowercased().hasPrefix(corrected.mainArtist.lowercased()) {
-            Logger.intelligence.debug("Model returned “\(corrected.mainArtist, privacy: .public)” (\(corrected.reasoning, privacy: .public) for “\(artist, privacy: .public)”, ignoring")
+        guard Self.isValidPrefix(split, of: artist) else {
+            Logger.intelligence.debug("Model returned “\(split, privacy: .public)” for “\(artist, privacy: .public)”, ignoring")
             return .from(original: artist)
         }
 
-        Logger.intelligence.debug("Corrected “\(artist, privacy: .public)” to “\(corrected.mainArtist, privacy: .public)” (\(corrected.reasoning, privacy: .public))")
-
-        // Persist so we don't re-run the model for this artist again
-        CorrectionStore.save(target: artist, replacement: corrected.mainArtist, entity: .artist, in: modelContext)
-        return corrected.mainArtist == artist
-            ? .from(original: artist)
-            : .from(corrected: corrected, original: artist)
-    }
-
-    func needsCorrection(artist: String) -> Bool {
-        return artist.contains(", ") || artist.contains(" & ")
+        // persist so we don't re-run the model for this artist again
+        let row = ManualCorrection(kind: .artist, artistName: artist, replacement: split, isAutomatic: true)
+        modelContext.insert(row)
+        try? modelContext.save()
+        return split == artist ? .from(original: artist) : .from(corrected: split, original: artist)
     }
 }
 #endif

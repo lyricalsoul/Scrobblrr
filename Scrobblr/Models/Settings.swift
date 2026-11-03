@@ -4,40 +4,37 @@
 //
 //  Created by Renan Martins on 6/18/26.
 //
-// App settings.
-// How much % of the song must be scrobbled (50%) OR how much max time (3m)
-// Whether the AI artist name fix should be used
 
 import Foundation
 import SwiftData
 
-/// Persisted app settings. Use ``shared(in:)`` to fetch the single instance used across the app!
+/// use ``shared(in:)`` to fetch the single instance used across the app
 @Model
 final class Settings {
-    /// Fraction of the track that must elapse before it is scrobbled (e.g. `0.5` for 50%)
+    /// fraction of the track, e.g. `0.5` for 50%
     var scrobbleThreshold: Double
 
-    /// Maximum listening time, in seconds, after which a track is scrobbled
-    /// regardless of `scrobbleThreshold` (e.g. `180` for 3 minutes)
+    /// seconds after which a track is scrobbled regardless of `scrobbleThreshold`
     var maxScrobbleSeconds: Int
 
-    /// Tracks shorter than this (in seconds) are never scrobbled
+    /// tracks shorter than this are never scrobbled
     var minTrackSeconds: Int
 
-    /// Whether the on-device AI artist-name correction should be applied
     var useArtistFix: Bool
 
-    /// Whether the menu shows the currently playing track
     var showNowPlayingInMenu: Bool
 
-    /// Whether the currently playing track is broadcast as a Discord Rich Presence (macOS only)
+    /// mac only
     var discordPresenceEnabled: Bool = true
 
-    /// Whether this device pushes its now-playing state for cross-device presence relay.
+    /// this device pushes its now playing for the cross-device relay
     var crossDevicePresenceEnabled: Bool = true
 
-    /// Whether this Mac shows another device's relayed now-playing state on Discord.
+    /// this mac shows another device's now playing on discord
     var receiveCrossDevicePresenceEnabled: Bool = true
+
+    /// experiment: recover a stale `SystemMusicPlayer` through `MPMusicPlayerController` instead of the audio session
+    var useMPMusicPlayerRecovery: Bool = true
 
     init(
         scrobbleThreshold: Double = 0.5,
@@ -47,7 +44,8 @@ final class Settings {
         showNowPlayingInMenu: Bool = true,
         discordPresenceEnabled: Bool = true,
         crossDevicePresenceEnabled: Bool = true,
-        receiveCrossDevicePresenceEnabled: Bool = true
+        receiveCrossDevicePresenceEnabled: Bool = true,
+        useMPMusicPlayerRecovery: Bool = true
     ) {
         self.scrobbleThreshold = scrobbleThreshold
         self.maxScrobbleSeconds = maxScrobbleSeconds
@@ -57,6 +55,7 @@ final class Settings {
         self.discordPresenceEnabled = discordPresenceEnabled
         self.crossDevicePresenceEnabled = crossDevicePresenceEnabled
         self.receiveCrossDevicePresenceEnabled = receiveCrossDevicePresenceEnabled
+        self.useMPMusicPlayerRecovery = useMPMusicPlayerRecovery
     }
 
     @MainActor

@@ -26,4 +26,15 @@ extension View {
             }
         }
     }
+
+    /// wraps the view in a plain navigation link when there is somewhere to go
+    @ViewBuilder
+    func infoLink(_ route: InfoRoute?) -> some View {
+        if let route {
+            NavigationLink(value: route) { self }
+                .buttonStyle(.plain)
+        } else {
+            self
+        }
+    }
 }

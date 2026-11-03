@@ -40,15 +40,29 @@ struct CollageView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Collage")
-        .toolbar { generateButton }
+        .toolbar {
+            generateButton
+            shareButton
+        }
         .background { AnimatedBackdrop(url: manager.displayCoverURL) }
         #else
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                controlSections
-                previewSection
+        GeometryReader { geo in
+            if InfoMetrics.isWide(geo.size) {
+                HStack(spacing: 0) {
+                    controlsPane
+                        .frame(width: min(380, geo.size.width * 0.45))
+                    preview
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        controlSections
+                        previewSection
+                    }
+                    .padding(20)
+                }
             }
-            .padding(20)
         }
         .navigationTitle("Collage")
         .toolbar {
@@ -61,7 +75,6 @@ struct CollageView: View {
 
     // MARK: - Controls
 
-    #if os(macOS)
     private var controlsPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -71,23 +84,22 @@ struct CollageView: View {
             .padding(20)
         }
     }
-    #endif
 
     @ViewBuilder
     private var controlSections: some View {
         glassSection("Source") {
             Picker("Theme", selection: $theme) {
-                ForEach(CollageTheme.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(CollageTheme.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
 
             Picker("Type", selection: $type) {
-                ForEach(LastFMEntity.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(LastFMEntity.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
 
             Picker("Time period", selection: $period) {
-                ForEach(LastFMPeriod.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(LastFMPeriod.allCases) { Text($0.title).tag($0) }
             }
         }
 
@@ -137,7 +149,6 @@ struct CollageView: View {
 
     // MARK: - Collage Preview
 
-    #if os(macOS)
     @ViewBuilder
     private var preview: some View {
         if isGenerating {
@@ -150,7 +161,6 @@ struct CollageView: View {
                     .frame(width: side, height: side)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .toolbar { shareButton }
         } else {
             ContentUnavailableView(
                 "No Collage Yet",
@@ -160,7 +170,8 @@ struct CollageView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
-    #else
+
+    #if os(iOS)
     @ViewBuilder
     private var previewSection: some View {
         if isGenerating {

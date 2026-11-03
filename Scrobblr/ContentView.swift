@@ -1,119 +1,4 @@
 import SwiftUI
-import SwiftData
-import CachedAsyncImage
-
-@main struct MyApp: App {
-    @State private var manager: ScrobblerManager
-    @State private var model: MediaModel
-    @State private var webAuth = WebAuthCoordinator()
-    #if os(macOS)
-    @State private var updater = SparkleUpdater()
-    @Environment(\.openWindow) private var openWindow
-    #endif
-
-    private let modelContainer: ModelContainer
-    private let settings: Settings
-
-    init() {
-        let container: ModelContainer
-        do {
-            container = try ModelContainer(for: AutoCorrect.self, Settings.self, QueuedScrobble.self)
-        } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
-        }
-
-        let settings = Settings.shared(in: container.mainContext)
-        let manager = ScrobblerManager(modelContainer: container)
-
-        modelContainer = container
-        self.settings = settings
-
-        _manager = State(initialValue: manager)
-        _model = State(initialValue: MediaModel(manager: manager, settings: settings))
-    }
-
-    var body: some Scene {
-        WindowGroup(id: "main") {
-            #if os(macOS)
-            RootView(manager: manager, settings: settings, updater: updater)
-            #else
-            RootView(manager: manager, settings: settings, model: model)
-                .task { await model.start() }
-            #endif
-        }
-        #if os(macOS)
-        .defaultLaunchBehavior(.suppressed)
-        #endif
-        .modelContainer(modelContainer)
-
-        #if os(macOS)
-        MenuBarExtra(
-            "Scroblrr",
-            systemImage: (manager.displayInfo != nil) ? "music.note" : "music.note.slash"
-        ) {
-            let scrobbler = manager.lastFM
-            if scrobbler.isAuthenticated {
-                Text("Signed in as \(scrobbler.username ?? "—")")
-            } else {
-                Button("Sign In to Last.fm…") {
-                    Task { await webAuth.signIn(scrobbler) }
-                }
-            }
-            Divider()
-
-            if settings.showNowPlayingInMenu {
-                if let device = manager.displayDeviceName {
-                    Text("\(manager.displayInfo?.displayName ?? "No playback detected") · \(device)")
-                } else {
-                    Text(manager.displayInfo?.displayName ?? "No playback detected")
-                }
-                if settings.discordPresenceEnabled {
-                    discordStatusLabel
-                }
-                Divider()
-            }
-
-            Button("Open Scroblrr") {
-                openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
-            }
-
-            Button("Check for Updates…") {
-                updater.checkForUpdates()
-            }
-            .disabled(!updater.canCheckForUpdates)
-
-            SettingsLink {
-                Text("Settings…")
-            }
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-
-        SwiftUI.Settings {
-            SettingsView(settings: settings, scrobbler: manager.lastFM, updater: updater)
-                .modelContainer(modelContainer)
-        }
-        #endif
-    }
-
-    #if os(macOS)
-    @ViewBuilder
-    private var discordStatusLabel: some View {
-        switch manager.discordPresence.status {
-        case .disabled:
-            Label("Discord integration disabled", systemImage: "circle")
-        case .connecting:
-            Label("Connecting to Discord...", systemImage: "circle.dotted")
-        case .connected:
-            Label("Broadcasting to Discord", systemImage: "checkmark.circle.fill")
-        case .error(let message):
-            Label("Discord: \(message)", systemImage: "exclamationmark.circle.fill")
-        }
-    }
-    #endif
-}
 
 // MARK: - Sections
 
@@ -124,6 +9,15 @@ enum AppSection: String, CaseIterable, Identifiable {
     case settings = "Settings"
 
     var id: String { rawValue }
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .overview: "Now Playing"
+        case .week:     "Your Week"
+        case .collage:  "Collage"
+        case .settings: "Settings"
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -141,7 +35,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .overview: OverviewView(manager: manager)
         case .week:     WeekView(manager: manager)
         case .collage:  CollageView(manager: manager)
-        case .settings: SettingsView(settings: settings, scrobbler: manager.lastFM, updater: updater)
+        case .settings: SettingsView(settings: settings, scrobbler: manager.lastFM, updater: updater, onSignOut: { manager.signOut() })
         }
     }
     #else
@@ -151,7 +45,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .overview: OverviewView(manager: manager)
         case .week:     WeekView(manager: manager)
         case .collage:  CollageView(manager: manager)
-        case .settings: SettingsView(settings: settings, scrobbler: manager.lastFM)
+        case .settings: SettingsView(settings: settings, scrobbler: manager.lastFM, onSignOut: { manager.signOut() })
         }
     }
     #endif
@@ -169,6 +63,7 @@ struct RootView: View {
     #endif
 
     @State private var webAuth = WebAuthCoordinator()
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         #if os(iOS)
@@ -204,7 +99,7 @@ struct RootView: View {
         } actions: {
             Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
+                    openURL(url)
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -228,7 +123,7 @@ struct SidebarNavigation: View {
     var body: some View {
         NavigationSplitView {
             List(sections, selection: $selection) { section in
-                Label(section.rawValue, systemImage: section.symbol)
+                Label(section.title, systemImage: section.symbol)
                     .tag(section)
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
@@ -256,14 +151,15 @@ struct TabNavigation: View {
     var body: some View {
         TabView {
             ForEach(AppSection.allCases) { section in
-                NavigationStack {
-                    section.destination(manager: manager, settings: settings)
-                        .infoRouteDestination(manager: manager)
+                Tab(section.title, systemImage: section.symbol) {
+                    NavigationStack {
+                        section.destination(manager: manager, settings: settings)
+                            .infoRouteDestination(manager: manager)
+                    }
                 }
-                .tabItem { Label(section.rawValue, systemImage: section.symbol) }
-                .tag(section)
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
     }
 }
 #endif

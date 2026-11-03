@@ -29,11 +29,11 @@ struct WeekView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         ForEach(LastFMPeriod.allCases) { candidate in
-                            Button(candidate.rawValue) { period = candidate }
+                            Button(candidate.title) { period = candidate }
                         }
                     } label: {
                         HStack(spacing: 6) {
-                            Text(period.rawValue)
+                            Text(period.title)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -71,6 +71,7 @@ struct WeekView: View {
                 albumColumn
                 trackColumn
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
         #endif
@@ -88,7 +89,7 @@ struct WeekView: View {
         defer { isLoading = false }
 
         do {
-            let charts = try await manager.epistolares.userChartsAll(username: username, period: period, limit: 10)
+            let charts = try await Epistolares().userChartsAll(username: username, period: period, limit: 10)
             topArtists = charts.artists.items.map(SimpleTopData.init)
             topAlbums = charts.albums.items.map(SimpleTopData.init)
             topTracks = charts.tracks.items.map(SimpleTopData.init)
@@ -102,40 +103,22 @@ struct WeekView: View {
 
     private var artistColumn: some View {
         chartColumn(title: "Top artists", items: topArtists) { artist in
-            if let id = artist.id {
-                NavigationLink(value: InfoRoute.artist(id: id, name: artist.name)) {
-                    ArtistRow(data: artist)
-                }
-                .buttonStyle(.plain)
-            } else {
-                ArtistRow(data: artist)
-            }
+            ArtistRow(data: artist)
+                .infoLink(artist.id.map { .artist(id: $0, name: artist.name) })
         }
     }
 
     private var albumColumn: some View {
         chartColumn(title: "Top albums", items: topAlbums) { album in
-            if let id = album.id {
-                NavigationLink(value: InfoRoute.album(id: id, name: album.name)) {
-                    AlbumRow(data: album)
-                }
-                .buttonStyle(.plain)
-            } else {
-                AlbumRow(data: album)
-            }
+            CoverRow(data: album, color: .blue, symbol: "opticaldisc")
+                .infoLink(album.id.map { .album(id: $0, name: album.name) })
         }
     }
 
     private var trackColumn: some View {
         chartColumn(title: "Top tracks", items: topTracks) { track in
-            if let id = track.id {
-                NavigationLink(value: InfoRoute.track(id: id, name: track.name)) {
-                    TrackRow(data: track)
-                }
-                .buttonStyle(.plain)
-            } else {
-                TrackRow(data: track)
-            }
+            CoverRow(data: track, color: .purple, symbol: "music.note")
+                .infoLink(track.id.map { .track(id: $0, name: track.name) })
         }
     }
 
@@ -147,6 +130,7 @@ struct WeekView: View {
         #if os(macOS)
         ScrollView {
             chartSection(title: title, items: items, row: row)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 20)
         }
         .scrollEdgeEffectHidden(true, for: .bottom)
@@ -164,8 +148,10 @@ struct WeekView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.headline)
+                .lineLimit(1)
+                .fixedSize()
 
-            DividedGlassCard(items: items, dividerLeadingInset: 54) { item in
+            DividedGlassCard(items: items, id: \.listKey, dividerLeadingInset: 54) { item in
                 row(item)
                     .padding(.horizontal, 14)
             }
@@ -202,38 +188,11 @@ private struct ArtistRow: View {
     }
 }
 
-private struct AlbumRow: View {
+private struct CoverRow: View {
     let data: SimpleTopData
-    var body: some View {
-        HStack(spacing: 10) {
-            CachedAsyncImage(url: data.coverURL) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            } placeholder: {
-                return RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.blue.gradient)
-                    .frame(width: 36, height: 36)
-                    .overlay(Image(systemName: "opticaldisc").font(.caption).foregroundStyle(.white.opacity(0.9)))
-            }
-            
-            VStack(alignment: .leading, spacing: 1) {
-                Text(data.name).font(.body).lineLimit(1).truncationMode(.tail)
-                if let artist = data.artist {
-                    Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
-                }
-            }
-            Spacer()
-            Text("\(data.scrobbles) scrobbles").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 10)
-    }
-}
+    let color: Color
+    let symbol: String
 
-private struct TrackRow: View {
-    let data: SimpleTopData
     var body: some View {
         HStack(spacing: 10) {
             CachedAsyncImage(url: data.coverURL) { image in
@@ -244,9 +203,9 @@ private struct TrackRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } placeholder: {
                 return RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.purple.gradient)
+                    .fill(color.gradient)
                     .frame(width: 36, height: 36)
-                    .overlay(Image(systemName: "music.note").font(.caption).foregroundStyle(.white.opacity(0.9)))
+                    .overlay(Image(systemName: symbol).font(.caption).foregroundStyle(.white.opacity(0.9)))
             }
             
             VStack(alignment: .leading, spacing: 1) {

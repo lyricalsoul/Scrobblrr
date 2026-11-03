@@ -43,12 +43,7 @@ struct EpistolaresTrackInfo: Decodable {
         let listeners: Int
         let scrobbles: Int
         let tags: [String]
-        let userScrobbles: UserScrobbles?
-
-        struct UserScrobbles: Decodable {
-            let playCount: Int
-            let loved: Bool
-        }
+        let userScrobbles: EpistolaresUserScrobbles?
     }
 
     struct Album: Decodable {
@@ -73,13 +68,11 @@ struct EpistolaresTrackInfo: Decodable {
 struct EpistolaresArtistInfo: Decodable {
     let id: String?
     let name: String
-    let mbid: String?
     let listeners: Int
     let scrobbles: Int
     let userScrobbles: EpistolaresUserScrobbles?
     let url: String?
     let cover: Cover?
-    let aliases: [String]
     let tags: [String]
     let bio: EpistolaresBio?
     let similarArtists: [SimilarArtist]
@@ -95,7 +88,6 @@ struct EpistolaresAlbumInfo: Decodable {
     let id: String?
     let name: String
     let artist: String
-    let mbid: String?
     let listeners: Int
     let scrobbles: Int
    
@@ -142,9 +134,6 @@ struct PresenceRegistration: Decodable {
 }
 
 struct ChartPage: Decodable {
-    let page: Int
-    let totalPages: Int
-    let total: Int
     let items: [ChartItem]
 }
 
@@ -195,91 +184,98 @@ enum EpistolaresError: LocalizedError {
     }
 }
 
-struct Epistolares {
-    private static let baseURL = Constants.epistolaresBaseURL
+nonisolated protocol EpistolaresAPI: Sendable {
+    func trackInfo(track: String, artist: String, album: String?, username: String?) async throws -> EpistolaresTrackInfo
+    func recentTracks(username: String, limit: Int) async throws -> EpistolaresRecentTracks
+    func registerPresence(sessionKey: String) async throws -> PresenceRegistration
+    func pushPresence(username: String, pushKey: String, device: String, info: GenericPlaybackInfo?) async throws
+    func presence(username: String, pushKey: String) async throws -> RemotePresence?
+    func invalidateTrackInfoCache()
+}
 
-    private static let trackInfoCache = NSCache<NSString, TrackInfoCacheEntry>()
-    private static let trackInfoTTL: TimeInterval = 300
+nonisolated final class TrackInfoCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private let ttl: TimeInterval
+    private var entries: [String: (value: EpistolaresTrackInfo, at: Date)] = [:]
+    var count: Int { lock.withLock { entries.count } }
 
-    private final class TrackInfoCacheEntry {
-        let value: EpistolaresTrackInfo
-        let cachedAt = Date()
-        init(_ value: EpistolaresTrackInfo) { self.value = value }
+    init(ttl: TimeInterval = 300) { self.ttl = ttl }
+
+    func value(for key: String) -> EpistolaresTrackInfo? {
+        lock.withLock { entries[key].flatMap { Date().timeIntervalSince($0.at) < ttl ? $0.value : nil } }
     }
+    func set(_ value: EpistolaresTrackInfo, for key: String) {
+        lock.withLock {
+            entries = entries.filter { Date().timeIntervalSince($0.value.at) < ttl }
+            entries[key] = (value, Date())
+        }
+    }
+    func removeAll() { lock.withLock { entries = [:] } }
+}
 
-    private let decoder: JSONDecoder = {
+nonisolated struct Epistolares: EpistolaresAPI {
+    private static let baseURL = Constants.epistolaresBaseURL
+    static let sharedCache = TrackInfoCache()
+
+    var session = URLSession.shared
+    var cache = Epistolares.sharedCache
+
+    static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
 
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
     // MARK: - Methofs
 
     func trackInfo(track: String, artist: String, album: String? = nil, username: String? = nil) async throws -> EpistolaresTrackInfo {
-        let key = "track|\(track)|\(artist)|\(album ?? "")|\(username ?? "")" as NSString
-        if let cached = cachedTrackInfo(for: key) { return cached }
-
-        var items = [
-            URLQueryItem(name: "track", value: track),
-            URLQueryItem(name: "artist", value: artist),
-        ]
-        if let album { items.append(URLQueryItem(name: "album", value: album)) }
-        if let username { items.append(URLQueryItem(name: "username", value: username)) }
-
-        let result: EpistolaresTrackInfo = try await get("/track/info", query: items)
-        Self.trackInfoCache.setObject(TrackInfoCacheEntry(result), forKey: key)
-        return result
+        let key = [track, artist, album ?? "", username ?? ""].map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.joined(separator: "|")
+        return try await cached(key) {
+            try await get("/track/info", query: Self.query(("track", track), ("artist", artist), ("album", album), ("username", username)))
+        }
     }
 
     func trackInfo(id: String, username: String? = nil) async throws -> EpistolaresTrackInfo {
-        let key = "id|\(id)|\(username ?? "")" as NSString
-        if let cached = cachedTrackInfo(for: key) { return cached }
+        try await cached("id|\(id)|\(username ?? "")") {
+            try await get("/track/info", query: Self.query(("id", id), ("username", username)))
+        }
+    }
 
-        var items = [URLQueryItem(name: "id", value: id)]
-        if let username { items.append(URLQueryItem(name: "username", value: username)) }
-        let result: EpistolaresTrackInfo = try await get("/track/info", query: items)
-        Self.trackInfoCache.setObject(TrackInfoCacheEntry(result), forKey: key)
+    func invalidateTrackInfoCache() { cache.removeAll() }
+
+    private func cached(_ key: String, fetch: () async throws -> EpistolaresTrackInfo) async throws -> EpistolaresTrackInfo {
+        if let hit = cache.value(for: key) { return hit }
+        let result = try await fetch()
+        cache.set(result, for: key)
         return result
     }
 
-    private func cachedTrackInfo(for key: NSString) -> EpistolaresTrackInfo? {
-        guard let entry = Self.trackInfoCache.object(forKey: key),
-              Date().timeIntervalSince(entry.cachedAt) < Self.trackInfoTTL
-        else { return nil }
-        return entry.value
-    }
-
     func artistInfo(id: String, username: String? = nil) async throws -> EpistolaresArtistInfo {
-        var items = [URLQueryItem(name: "id", value: id)]
-        if let username { items.append(URLQueryItem(name: "username", value: username)) }
-        return try await get("/artist/info", query: items)
+        try await get("/artist/info", query: Self.query(("id", id), ("username", username)))
     }
 
     func albumInfo(id: String, username: String? = nil) async throws -> EpistolaresAlbumInfo {
-        var items = [URLQueryItem(name: "id", value: id)]
-        if let username { items.append(URLQueryItem(name: "username", value: username)) }
-        return try await get("/album/info", query: items)
+        try await get("/album/info", query: Self.query(("id", id), ("username", username)))
     }
 
     func userChartsAll(username: String, period: LastFMPeriod, limit: Int = 50) async throws -> AllCharts {
-        try await get("/user/charts/all", query: [
-            URLQueryItem(name: "username", value: username),
-            URLQueryItem(name: "period", value: period.apiValue),
-            URLQueryItem(name: "limit", value: String(limit)),
-        ])
+        try await get("/user/charts/all", query: Self.query(("username", username), ("period", period.apiValue), ("limit", String(limit))))
     }
 
     func recentTracks(username: String, limit: Int = 2) async throws -> EpistolaresRecentTracks {
-        try await get("/user/recent-tracks", query: [
-            URLQueryItem(name: "username", value: username),
-            URLQueryItem(name: "limit", value: String(limit)),
-        ])
+        try await get("/user/recent-tracks", query: Self.query(("username", username), ("limit", String(limit))))
     }
 
     // MARK: - Cross-device presence
 
     func registerPresence(sessionKey: String) async throws -> PresenceRegistration {
-        try await post("/user/presence/register", body: ["sessionKey": sessionKey])
+        try Self.decoder.decode(PresenceRegistration.self, from: await post("/user/presence/register", body: ["sessionKey": sessionKey]))
     }
 
     func pushPresence(username: String, pushKey: String, device: String, info: GenericPlaybackInfo?) async throws {
@@ -305,6 +301,10 @@ struct Epistolares {
 
     // MARK: - Request helpers
 
+    private static func query(_ items: (String, String?)...) -> [URLQueryItem] {
+        items.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }
+    }
+
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem], headers: [String: String] = [:]) async throws -> T {
         var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         components.queryItems = query
@@ -314,11 +314,15 @@ struct Epistolares {
         var request = URLRequest(url: url)
         for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
-        guard let http = response as? HTTPURLResponse else {
-            throw EpistolaresError.badResponse
-        }
+        try validate(response)
+
+        return try Self.decoder.decode(T.self, from: data)
+    }
+
+    private func validate(_ response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse else { throw EpistolaresError.badResponse }
         switch http.statusCode {
         case 200..<300: break
         case 400:       throw EpistolaresError.badRequest
@@ -326,45 +330,19 @@ struct Epistolares {
         case 404:       throw EpistolaresError.notFound
         default:        throw EpistolaresError.server(http.statusCode)
         }
-
-        return try decoder.decode(T.self, from: data)
-    }
-
-    private static let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
-
-    private func post<T: Decodable>(_ path: String, body: some Encodable, headers: [String: String] = [:]) async throws -> T {
-        let data = try await postRaw(path, body: body, headers: headers)
-        return try decoder.decode(T.self, from: data)
-    }
-
-    private func post(_ path: String, body: some Encodable, headers: [String: String] = [:]) async throws {
-        _ = try await postRaw(path, body: body, headers: headers)
     }
 
     @discardableResult
-    private func postRaw(_ path: String, body: some Encodable, headers: [String: String]) async throws -> Data {
+    private func post(_ path: String, body: some Encodable, headers: [String: String] = [:]) async throws -> Data {
         var request = URLRequest(url: Self.baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
         request.httpBody = try Self.encoder.encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
-        guard let http = response as? HTTPURLResponse else {
-            throw EpistolaresError.badResponse
-        }
-        switch http.statusCode {
-        case 200..<300: break
-        case 400:       throw EpistolaresError.badRequest
-        case 401:       throw EpistolaresError.unauthorized
-        case 404:       throw EpistolaresError.notFound
-        default:        throw EpistolaresError.server(http.statusCode)
-        }
+        try validate(response)
 
         return data
     }

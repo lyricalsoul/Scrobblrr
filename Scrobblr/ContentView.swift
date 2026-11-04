@@ -117,6 +117,7 @@ struct SidebarNavigation: View {
     let updater: SparkleUpdater
 
     @State private var selection: AppSection? = .overview
+    @State private var backdrop = BackdropState()
 
     private let sections: [AppSection] = [.overview, .week, .collage]
 
@@ -136,7 +137,8 @@ struct SidebarNavigation: View {
                     .toolbarBackground(.hidden, for: .windowToolbar)
             }
         }
-        .background { AnimatedBackdrop(url: manager.displayCoverURL) }
+        .background { AnimatedBackdrop(url: backdrop.override ?? manager.displayCoverURL) }
+        .environment(backdrop)
     }
 }
 #endif
@@ -148,18 +150,22 @@ struct TabNavigation: View {
     let manager: ScrobblerManager
     let settings: Settings
 
+    @State private var backdrop = BackdropState()
+
     var body: some View {
         TabView {
             ForEach(AppSection.allCases) { section in
                 Tab(section.title, systemImage: section.symbol) {
                     NavigationStack {
                         section.destination(manager: manager, settings: settings)
+                            .sharedBackdrop(manager)
                             .infoRouteDestination(manager: manager)
                     }
                 }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .environment(backdrop)
     }
 }
 #endif

@@ -12,55 +12,99 @@ struct AnimatedBackdrop: View {
     let url: URL?
 
     @Environment(\.scenePhase) private var scenePhase
-    @State private var breathe = false
-    @State private var hueShift = false
 
     var body: some View {
-        ZStack {
-            layer(scale: breathe ? 1.65 : 1.45)
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: scenePhase != .active)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            let breathe = (sin(time * 2 * .pi / 36) + 1) / 2
+            let hueShift = sin(time * 2 * .pi / 52) * 14
 
-            layer(scale: breathe ? 1.45 : 1.65)
-                .blendMode(.colorBurn)
-                .opacity(0.35)
-        }
-        .saturation(1.6)
-        .hueRotation(.degrees(hueShift ? 14 : -14))
-        .ignoresSafeArea()
-        .onAppear { updateAnimation(active: scenePhase == .active) }
-        .onChange(of: scenePhase) { _, newPhase in updateAnimation(active: newPhase == .active) }
-    }
+            GeometryReader { geo in
+                ZStack {
+                    layer(scale: 1.45 + 0.2 * breathe)
 
-    private func updateAnimation(active: Bool) {
-        guard active else {
-            withAnimation(.none) {
-                breathe = false
-                hueShift = false
+                    layer(scale: 1.65 - 0.2 * breathe)
+                        .blendMode(.colorBurn)
+                        .opacity(0.35)
+                }
+                .animation(nil, value: geo.size)
             }
-            return
+            .saturation(1.6)
+            .hueRotation(.degrees(hueShift))
         }
-        withAnimation(.easeInOut(duration: 18).repeatForever(autoreverses: true)) {
-            breathe = true
-        }
-        withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
-            hueShift = true
-        }
+        .ignoresSafeArea()
     }
 
     private func layer(scale: CGFloat) -> some View {
-        CachedAsyncImage(url: url) { image in
-            image
-                .resizable()
-                .scaledToFill()
-                .blur(radius: 120, opaque: true)
-                .scaleEffect(scale)
-        } placeholder: {
-            Rectangle().fill(.quaternary)
+        Color.clear.overlay {
+            CachedAsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 120, opaque: true)
+                    .drawingGroup()
+                    .scaleEffect(scale)
+            } placeholder: {
+                Rectangle().fill(.quaternary)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .opacity(0.5)
         .id(url)
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.6), value: url)
     }
+}
+
+@Observable @MainActor
+final class BackdropState {
+    private(set) var override: URL?
+    @ObservationIgnored private var owner: UUID?
+
+    func set(_ url: URL?, by owner: UUID) {
+        self.owner = owner
+        override = url
+    }
+
+    func clear(by owner: UUID) {
+        guard self.owner == owner else { return }
+        override = nil
+    }
+}
+
+private struct BackdropModifier: ViewModifier {
+    let url: URL?
+    @Environment(BackdropState.self) private var state
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { state.set(url, by: id) }
+            .onChange(of: url) { _, new in state.set(new, by: id) }
+            .onDisappear { state.clear(by: id) }
+    }
+}
+
+extension View {
+    func backdrop(_ url: URL?) -> some View { modifier(BackdropModifier(url: url)) }
+}
+
+private struct SharedBackdropModifier: ViewModifier {
+    let manager: ScrobblerManager
+    @Environment(BackdropState.self) private var state
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.containerBackground(for: .navigation) {
+            AnimatedBackdrop(url: state.override ?? manager.coverImageUrl)
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+extension View {
+    /// iOS: gives a navigation destination the shared backdrop, macOS draws it once at the root instead
+    func sharedBackdrop(_ manager: ScrobblerManager) -> some View { modifier(SharedBackdropModifier(manager: manager)) }
 }

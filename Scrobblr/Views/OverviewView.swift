@@ -26,17 +26,20 @@ struct OverviewView: View {
             }
             .navigationTitle("Now Playing")
             #else
-            ScrollView {
-                if let track = manager.current {
-                    iosCard(for: track)
-                        .frame(maxWidth: 520)
-                        .frame(maxWidth: .infinity)
+            GeometryReader { geo in
+                if let track = manager.current, InfoMetrics.isWide(geo.size) {
+                    wideColumns(for: track, side: InfoMetrics.macCoverSide(for: geo.size))
                 } else {
-                    emptyState.padding(.top, 80)
+                    ScrollView {
+                        if let track = manager.current {
+                            iosCard(for: track)
+                                .frame(maxWidth: 520)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            emptyState.padding(.top, 80)
+                        }
+                    }
                 }
-            }
-            .background {
-                AnimatedBackdrop(url: manager.coverImageUrl)
             }
             .navigationTitle("Now Playing")
             #endif
@@ -85,6 +88,26 @@ struct OverviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
     #else
+    private func wideColumns(for track: GenericPlaybackInfo, side: CGFloat) -> some View {
+        HStack(spacing: 28) {
+            albumArtImage
+                .frame(width: side, height: side)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(radius: 18, y: 10)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    header(for: track, leading: true, large: true)
+                    statsCard(for: track)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(height: side)
+        }
+        .padding(.horizontal, 28)
+        .frame(maxHeight: .infinity)
+    }
+
     private func iosCard(for track: GenericPlaybackInfo) -> some View {
         VStack(spacing: 24) {
             albumArtImage
@@ -102,17 +125,17 @@ struct OverviewView: View {
 
     // MARK: - Header (title + artist)
 
-    private func header(for track: GenericPlaybackInfo) -> some View {
-        VStack(alignment: InfoMetrics.titleAlignment, spacing: 4) {
+    private func header(for track: GenericPlaybackInfo, leading: Bool = InfoMetrics.titleAlignment == .leading, large: Bool = false) -> some View {
+        VStack(alignment: leading ? .leading : .center, spacing: 4) {
             Text(track.title)
-                .font(.title.weight(.bold))
+                .font((large ? Font.largeTitle : .title).weight(.bold))
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
                 .textSelection(.enabled)
 
             HStack(spacing: 6) {
                 Text(track.artist)
-                    .font(.title3)
+                    .font(large ? .title2 : .title3)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .textSelection(.enabled)
@@ -121,14 +144,14 @@ struct OverviewView: View {
                     correctionsTrack = (track.id == manager.current?.id) ? (manager.rawCurrent ?? track) : track
                 } label: {
                     Image(systemName: "pencil.circle")
-                        .font(.title3)
+                        .font(large ? .title2 : .title3)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .multilineTextAlignment(InfoMetrics.titleTextAlignment)
-        .frame(maxWidth: .infinity, alignment: InfoMetrics.titleFrameAlignment)
+        .multilineTextAlignment(leading ? .leading : .center)
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
     }
 
     // MARK: - Stats card

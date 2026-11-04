@@ -129,7 +129,7 @@ struct InfoView<Extra: View>: View {
             }
             #endif
         }
-        .background { AnimatedBackdrop(url: coverURL) }
+        .backdrop(coverURL)
     }
 
     #if os(iOS)

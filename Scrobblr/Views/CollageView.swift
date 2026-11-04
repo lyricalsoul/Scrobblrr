@@ -44,7 +44,6 @@ struct CollageView: View {
             generateButton
             shareButton
         }
-        .background { AnimatedBackdrop(url: manager.displayCoverURL) }
         #else
         GeometryReader { geo in
             if InfoMetrics.isWide(geo.size) {
@@ -69,7 +68,6 @@ struct CollageView: View {
             generateButton
             shareButton
         }
-        .background { AnimatedBackdrop(url: manager.coverImageUrl) }
         #endif
     }
 

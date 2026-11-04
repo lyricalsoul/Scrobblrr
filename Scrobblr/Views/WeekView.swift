@@ -48,9 +48,6 @@ struct WeekView: View {
                     ProgressView()
                 }
             }
-            #if os(iOS)
-            .background { AnimatedBackdrop(url: manager.coverImageUrl) }
-            #endif
     }
 
     @ViewBuilder

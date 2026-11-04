@@ -13,17 +13,27 @@ enum InfoRoute: Hashable {
     case track(id: String, name: String)
 }
 
+private struct InfoDestination: View {
+    let route: InfoRoute
+    let manager: ScrobblerManager
+
+    var body: some View {
+        switch route {
+        case let .artist(id, name):
+            ArtistInfoView(id: id, name: name, manager: manager)
+        case let .album(id, name):
+            AlbumInfoView(id: id, name: name, manager: manager)
+        case let .track(id, name):
+            TrackInfoView(id: id, name: name, manager: manager)
+        }
+    }
+}
+
 extension View {
     func infoRouteDestination(manager: ScrobblerManager) -> some View {
         navigationDestination(for: InfoRoute.self) { route in
-            switch route {
-            case let .artist(id, name):
-                ArtistInfoView(id: id, name: name, manager: manager)
-            case let .album(id, name):
-                AlbumInfoView(id: id, name: name, manager: manager)
-            case let .track(id, name):
-                TrackInfoView(id: id, name: name, manager: manager)
-            }
+            InfoDestination(route: route, manager: manager)
+                .sharedBackdrop(manager)
         }
     }
 

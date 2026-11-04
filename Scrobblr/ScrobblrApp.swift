@@ -40,7 +40,10 @@ import Sentry
         CachedArtist.dedupe(in: container.mainContext)
 
         let settings = Settings.shared(in: container.mainContext)
-        let manager = ScrobblerManager(modelContainer: container, settings: settings)
+        let manager = ScrobblerManager(modelContainer: container, settings: settings, services: TestPlayback.isEnabled ? [] : nil)
+        #if DEBUG
+        if TestPlayback.isEnabled { Task { await TestPlayback.run(on: manager) } }
+        #endif
 
         modelContainer = container
         self.settings = settings
@@ -55,7 +58,7 @@ import Sentry
             RootView(manager: manager, settings: settings, updater: updater)
             #else
             RootView(manager: manager, settings: settings, model: model)
-                .task { await model.start() }
+                .task { if !TestPlayback.isEnabled { await model.start() } }
             #endif
         }
         #if os(macOS)

@@ -4,9 +4,10 @@ A scrobbler for macOS and iOS, focused on Apple Music support. Automatically fix
 ![](.github/Frame.png)
 
 ## Downloads
+- iOS: [Download on the App Store](https://apps.apple.com/app/scrobblrr/id6781907875)
 - macOS: [Download from GitHub](https://github.com/lyricalsoul/Scrobblrr/releases)
 - Homebrew: `brew install --cask lyricalsoul/tap/scrobblrr`
-- iOS: [Join the TestFlight beta](https://testflight.apple.com/join/tAWM91xV)
+
 
 ## TODO
 - [X] Clean up code

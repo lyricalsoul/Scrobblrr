@@ -275,7 +275,7 @@ private struct StatRow<Leading: View>: View {
                 .lineLimit(1)
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 0) {
-                Text(count.map(String.init) ?? "—")
+                Text(count?.formatted(.number) ?? "—")
                     .font(.body.weight(.semibold).monospacedDigit())
                 Text("scrobbles")
                     .font(.caption2)
